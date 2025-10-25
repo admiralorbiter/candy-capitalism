@@ -12,6 +12,9 @@ from ..entities.rumor import Rumor
 from ..entities.trading_bloc import TradingBloc
 from ..utils.spatial_grid import SpatialGrid
 from ..utils.vector2 import Vector2
+from .map_generator import map_generator
+from .kid_spawner import kid_spawner
+from ..ai.pathfinding import PathfindingManager
 
 
 class GameWorld:
@@ -48,12 +51,19 @@ class GameWorld:
         self.active = True
         self.paused = False
         
-    def update(self, dt: float):
+        # Map generation
+        self.map_generated = False
+        
+        # Pathfinding
+        self.pathfinding_manager = None
+        
+    def update(self, dt: float, renderer=None):
         """
         Update the game world.
         
         Args:
             dt: Delta time in seconds
+            renderer: Optional renderer for particle effects
         """
         if not self.active or self.paused:
             return
@@ -70,7 +80,7 @@ class GameWorld:
             self._update_ai()
         
         # Update entities (movement, animations)
-        self._update_entities(dt)
+        self._update_entities(dt, renderer)
         
         # Update systems
         self._update_systems(dt)
@@ -98,15 +108,18 @@ class GameWorld:
             if kid.active:
                 kid.ai_tick(self)
     
-    def _update_entities(self, dt: float):
+    def _update_entities(self, dt: float, renderer=None):
         """Update all entities."""
         # Update kids
         for kid in self.kids:
-            kid.update(dt)
+            kid.update(dt, renderer)
         
         # Update houses
         for house in self.houses:
             house.update(dt)
+        
+        # Handle kid-kid collision detection and separation
+        self._handle_kid_collisions(dt)
     
     def _update_systems(self, dt: float):
         """Update all systems."""
@@ -213,6 +226,58 @@ class GameWorld:
         self.game_time = 0.0
         self.ai_tick_timer = 0.0
     
+    def generate_map(self, layout_name: str = "default", seed: Optional[int] = None):
+        """
+        Generate a new map with houses.
+        
+        Args:
+            layout_name: Name of the layout configuration to use
+            seed: Random seed for reproducible generation
+        """
+        if self.map_generated:
+            print("Warning: Map already generated, clearing existing houses")
+            self.houses.clear()
+        
+        # Generate houses using map generator
+        houses = map_generator.generate_map(layout_name, seed)
+        
+        # Add houses to world
+        for house in houses:
+            self.add_house(house)
+        
+        self.map_generated = True
+        
+        # Initialize pathfinding manager
+        layout_info = map_generator.get_layout_info(layout_name)
+        world_width = layout_info.get("world_width", 2000)
+        world_height = layout_info.get("world_height", 2000)
+        self.pathfinding_manager = PathfindingManager(world_width, world_height)
+        
+        # Update obstacles with houses
+        self.pathfinding_manager.update_obstacles(self.houses)
+        
+        print(f"Generated map with {len(self.houses)} houses using layout '{layout_name}'")
+    
+    def spawn_kids(self, count: int = 10):
+        """
+        Spawn kids in the world.
+        
+        Args:
+            count: Number of kids to spawn
+        """
+        if not self.map_generated:
+            print("Warning: Cannot spawn kids without a map. Generate map first.")
+            return
+        
+        # Get world bounds from map generator
+        layout_info = map_generator.get_layout_info("default")
+        world_width = layout_info.get("world_width", 2000)
+        world_height = layout_info.get("world_height", 2000)
+        
+        # Spawn kids
+        kids = kid_spawner.spawn_kids(self, count, (world_width, world_height))
+        print(f"Spawned {len(kids)} kids")
+    
     def get_stats(self) -> Dict[str, Any]:
         """Get world statistics."""
         return {
@@ -220,5 +285,33 @@ class GameWorld:
             'houses': len(self.houses),
             'trading_blocs': len(self.trading_blocs),
             'game_time': self.game_time,
-            'spatial_grid_stats': self.spatial_grid.get_stats()
+            'spatial_grid_stats': self.spatial_grid.get_stats(),
+            'map_generated': self.map_generated
         }
+    
+    def _handle_kid_collisions(self, dt: float):
+        """Handle collision detection and separation between kids."""
+        if len(self.kids) < 2:
+            return
+        
+        # Use spatial grid for efficient collision detection
+        for kid in self.kids:
+            if not kid.active:
+                continue
+            
+            # Find nearby kids using spatial grid
+            search_radius = kid.collision_radius * 3
+            top_left = Vector2(kid.position.x - search_radius, kid.position.y - search_radius)
+            bottom_right = Vector2(kid.position.x + search_radius, kid.position.y + search_radius)
+            nearby_kids = self.spatial_grid.get_entities_in_rect(top_left, bottom_right)
+            
+            # Filter to only other kids
+            other_kids = [entity for entity in nearby_kids 
+                         if isinstance(entity, type(kid)) and entity != kid and entity.active]
+            
+            # Check for collisions
+            colliding_kids = kid.check_collision_with_kids(other_kids)
+            
+            # Apply separation force
+            if colliding_kids:
+                kid.apply_separation_force(colliding_kids, dt)

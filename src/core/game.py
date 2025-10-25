@@ -10,6 +10,9 @@ from typing import Optional
 from .constants import SCREEN_SIZE, FPS_TARGET, COLORS
 from .game_state import GameState, GameStateMachine, BaseState
 from .config_manager import config_manager
+from ..systems.game_world import GameWorld
+from ..rendering.renderer import Renderer
+from ..utils.vector2 import Vector2
 
 
 class Game:
@@ -84,10 +87,18 @@ class Game:
                 self.running = False
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    self.running = False
+                    if self.state_machine.current_state == GameState.PLAYING:
+                        # Pause the game
+                        self.state_machine.transition(GameState.PAUSED)
+                    else:
+                        self.running = False
                 else:
                     # Pass to current state
-                    self.state_machine.handle_event(event)
+                    result = self.state_machine.handle_event(event)
+                    if result == "start_game":
+                        self.state_machine.transition(GameState.PLAYING)
+                    elif result == "quit":
+                        self.running = False
             else:
                 # Pass to current state
                 self.state_machine.handle_event(event)
@@ -108,10 +119,21 @@ class Game:
 
 
 class MainMenuState(BaseState):
-    """Main menu state (placeholder for now)."""
+    """Main menu state with game start option."""
     
     def on_enter(self, data=None):
         print("Entered main menu")
+    
+    def handle_event(self, event):
+        """Handle input events for main menu."""
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE:
+                # Start the game
+                return "start_game"
+            elif event.key == pygame.K_ESCAPE:
+                # Quit
+                return "quit"
+        return False
     
     def render(self, screen):
         # Simple placeholder rendering
@@ -122,23 +144,127 @@ class MainMenuState(BaseState):
         
         # Instructions
         font_small = pygame.font.Font(None, 24)
-        instructions = font_small.render("Press ESC to quit", True, COLORS['GRAY'])
+        instructions = font_small.render("Press SPACE to start, ESC to quit", True, COLORS['GRAY'])
         inst_rect = instructions.get_rect(center=(SCREEN_SIZE[0]//2, SCREEN_SIZE[1]//2 + 50))
         screen.blit(instructions, inst_rect)
 
 
 class PlayingState(BaseState):
-    """Playing state (placeholder for now)."""
+    """Playing state with world and rendering."""
+    
+    def __init__(self):
+        self.world = GameWorld()
+        self.renderer = None
+        self.initialized = False
     
     def on_enter(self, data=None):
         print("Entered playing state")
+        if not self.initialized:
+            self.renderer = Renderer(pygame.display.get_surface())
+            # Generate the map
+            self.world.generate_map("default")
+            # Spawn kids
+            self.world.spawn_kids(10)
+            self.initialized = True
+            print("Playing state initialized with map and kids")
+    
+    def update(self, dt):
+        """Update the playing state."""
+        if self.world:
+            self.world.update(dt, self.renderer)
+    
+    def handle_event(self, event):
+        """Handle input events for playing state."""
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_F3:
+                # Toggle debug overlay
+                if self.renderer:
+                    self.renderer.toggle_debug()
+                return True
+            elif event.key == pygame.K_h:
+                # Toggle help overlay
+                if self.renderer:
+                    self.renderer.toggle_help()
+                return True
+            elif event.key == pygame.K_i:
+                # Toggle inventory display
+                if self.renderer:
+                    self.renderer.toggle_inventory_display(self.world)
+                return True
+            
+            # Camera movement (panning)
+            elif event.key == pygame.K_LEFT:
+                if self.renderer:
+                    current_pos = self.renderer.camera.position
+                    new_pos = current_pos + Vector2(-100, 0)
+                    self.renderer.camera.set_position(new_pos, smooth=False)
+                    print(f"Camera moved LEFT to: {new_pos}")
+                return True
+            elif event.key == pygame.K_RIGHT:
+                if self.renderer:
+                    current_pos = self.renderer.camera.position
+                    new_pos = current_pos + Vector2(100, 0)
+                    self.renderer.camera.set_position(new_pos, smooth=False)
+                    print(f"Camera moved RIGHT to: {new_pos}")
+                return True
+            elif event.key == pygame.K_UP:
+                if self.renderer:
+                    current_pos = self.renderer.camera.position
+                    new_pos = current_pos + Vector2(0, -100)
+                    self.renderer.camera.set_position(new_pos, smooth=False)
+                    print(f"Camera moved UP to: {new_pos}")
+                return True
+            elif event.key == pygame.K_DOWN:
+                if self.renderer:
+                    current_pos = self.renderer.camera.position
+                    new_pos = current_pos + Vector2(0, 100)
+                    self.renderer.camera.set_position(new_pos, smooth=False)
+                    print(f"Camera moved DOWN to: {new_pos}")
+                return True
+            
+            # Camera zoom
+            elif event.key == pygame.K_EQUALS or event.key == pygame.K_PLUS:
+                if self.renderer:
+                    self.renderer.camera.zoom_in(1.2)
+                    print(f"Camera zoomed IN to: {self.renderer.camera.zoom}")
+                return True
+            elif event.key == pygame.K_MINUS:
+                if self.renderer:
+                    self.renderer.camera.zoom_out(1.2)
+                    print(f"Camera zoomed OUT to: {self.renderer.camera.zoom}")
+                return True
+            
+            # Reset camera to center
+            elif event.key == pygame.K_r:
+                if self.renderer:
+                    self.renderer.camera.set_position(Vector2(1000, 1000), smooth=False)  # Center of world
+                    self.renderer.camera.set_zoom(0.5, smooth=False)  # Zoomed out to see more
+                    print("Camera reset to center of world")
+                return True
+        
+        # Mouse wheel zoom
+        elif event.type == pygame.MOUSEWHEEL:
+            if self.renderer:
+                if event.y > 0:  # Scroll up - zoom in
+                    self.renderer.camera.zoom_in(1.1)
+                    print(f"Mouse wheel ZOOM IN to: {self.renderer.camera.zoom}")
+                else:  # Scroll down - zoom out
+                    self.renderer.camera.zoom_out(1.1)
+                    print(f"Mouse wheel ZOOM OUT to: {self.renderer.camera.zoom}")
+            return True
+        
+        return False
     
     def render(self, screen):
-        # Simple placeholder rendering
-        font = pygame.font.Font(None, 36)
-        text = font.render("Playing State - Coming Soon!", True, COLORS['GREEN'])
-        text_rect = text.get_rect(center=(SCREEN_SIZE[0]//2, SCREEN_SIZE[1]//2))
-        screen.blit(text, text_rect)
+        """Render the playing state."""
+        if self.world and self.renderer:
+            self.renderer.render_world(self.world)
+        else:
+            # Fallback rendering
+            font = pygame.font.Font(None, 36)
+            text = font.render("Playing State - Initializing...", True, COLORS['GREEN'])
+            text_rect = text.get_rect(center=(SCREEN_SIZE[0]//2, SCREEN_SIZE[1]//2))
+            screen.blit(text, text_rect)
 
 
 class PausedState(BaseState):

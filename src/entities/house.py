@@ -18,21 +18,25 @@ class House(BaseEntity):
     (curse/bless) to manipulate the candy economy.
     """
     
-    def __init__(self, house_id: str, position: Vector2 = None):
+    def __init__(self, house_id: str, position: Vector2 = None, quality: int = 1):
         """
         Initialize a house entity.
         
         Args:
             house_id: Unique identifier for this house
             position: Position of the house
+            quality: House quality level (1=low, 2=mid, 3=high)
         """
         super().__init__(house_id, position)
         
         # House properties
-        self.candy_quality = 1.0  # Multiplier for candy quality (0.1 to 3.0)
-        self.candy_types: List[str] = []  # Types of candy this house gives
-        self.dispense_rate = 1.0  # How often it dispenses candy (seconds)
-        self.dispense_timer = 0.0
+        self.quality = quality  # Quality level (1, 2, or 3)
+        self.candy_quality = self._get_quality_multiplier(quality)  # Multiplier for candy quality
+        self.candy_types: List[str] = self._get_default_candy_types(quality)  # Types of candy this house gives
+        self.dispense_rate = 0.0  # How often it dispenses candy (seconds) - 0 means can dispense immediately
+        self.dispense_timer = 1.0  # Start ready to dispense
+        self.dispense_cooldown = 0.0  # Cooldown after dispensing candy
+        self.last_dispense_time = 0.0  # Time when candy was last dispensed
         
         # Power effects
         self.curse_timer = 0.0  # Time remaining for curse effect
@@ -41,7 +45,26 @@ class House(BaseEntity):
         
         # Visual properties
         self.house_type = "normal"  # normal, spooky, mansion, etc.
-        self.attraction_radius = 100.0  # How far kids are attracted to this house
+        self.attraction_radius = self._get_attraction_radius(quality)  # How far kids are attracted to this house
+    
+    def _get_quality_multiplier(self, quality: int) -> float:
+        """Get candy quality multiplier based on house quality level."""
+        quality_multipliers = {1: 0.5, 2: 1.0, 3: 1.5}
+        return quality_multipliers.get(quality, 1.0)
+    
+    def _get_default_candy_types(self, quality: int) -> List[str]:
+        """Get default candy types based on house quality level."""
+        if quality == 1:  # Low quality
+            return ["trash", "health"]
+        elif quality == 2:  # Mid quality
+            return ["fruity", "novelty"]
+        else:  # High quality
+            return ["chocolate", "sour", "fruity"]
+    
+    def _get_attraction_radius(self, quality: int) -> float:
+        """Get attraction radius based on house quality level."""
+        attraction_radii = {1: 80.0, 2: 100.0, 3: 120.0}
+        return attraction_radii.get(quality, 100.0)
         
     def update(self, dt: float):
         """Update house state."""
@@ -55,6 +78,12 @@ class House(BaseEntity):
         
         # Update dispense timer
         self.dispense_timer += dt
+        
+        # Update cooldown timer
+        if self.dispense_cooldown > 0:
+            self.dispense_cooldown -= dt
+            if self.dispense_cooldown < 0:
+                self.dispense_cooldown = 0
     
     def _update_power_effects(self, dt: float):
         """Update curse and bless effect timers."""
@@ -114,7 +143,7 @@ class House(BaseEntity):
     
     def can_dispense_candy(self) -> bool:
         """Check if house can dispense candy now."""
-        return self.dispense_timer >= self.dispense_rate
+        return self.dispense_timer >= self.dispense_rate and self.dispense_cooldown <= 0
     
     def dispense_candy(self) -> Dict[str, int]:
         """
@@ -126,8 +155,10 @@ class House(BaseEntity):
         if not self.can_dispense_candy():
             return {}
         
-        # Reset dispense timer
+        # Reset dispense timer and set cooldown
         self.dispense_timer = 0.0
+        self.dispense_cooldown = 5.0  # 5 second cooldown after dispensing
+        self.last_dispense_time = self.dispense_timer
         
         # Calculate candy based on quality
         candy_given = {}
@@ -218,13 +249,19 @@ class House(BaseEntity):
             40, 30
         )
         
-        # Choose color based on house state
+        # Choose color based on house state and quality
         if self.is_blessed():
             color = (100, 255, 100)  # Green for blessed
         elif self.is_cursed():
             color = (255, 100, 100)  # Red for cursed
         else:
-            color = (200, 200, 200)  # Gray for normal
+            # Color based on quality level
+            if self.quality == 1:  # Low quality
+                color = (150, 150, 150)  # Gray
+            elif self.quality == 2:  # Mid quality
+                color = (139, 69, 19)  # Brown
+            else:  # High quality
+                color = (255, 215, 0)  # Gold
         
         pygame.draw.rect(screen, color, house_rect)
         pygame.draw.rect(screen, (0, 0, 0), house_rect, 2)
@@ -234,3 +271,21 @@ class House(BaseEntity):
             effect_color = (255, 255, 0) if self.is_blessed() else (255, 0, 0)
             pygame.draw.circle(screen, effect_color, 
                              screen_pos.to_int_tuple(), 25, 2)
+    
+    def get_cooldown_progress(self) -> float:
+        """Get cooldown progress as 0.0-1.0 (1.0 = ready, 0.0 = just dispensed)."""
+        if self.dispense_cooldown <= 0:
+            return 1.0
+        
+        # Calculate progress (1.0 when cooldown is 0, 0.0 when cooldown is at max)
+        max_cooldown = 5.0  # Default cooldown time
+        progress = max(0.0, 1.0 - (self.dispense_cooldown / max_cooldown))
+        return progress
+    
+    def is_available(self) -> bool:
+        """Check if house is available to dispense candy."""
+        return self.dispense_cooldown <= 0
+    
+    def get_next_available_time(self) -> float:
+        """Get time until house is available again."""
+        return max(0.0, self.dispense_cooldown)

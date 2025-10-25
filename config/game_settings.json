@@ -26,5 +26,21 @@
     "min_members": 3,
     "formation_threshold": 0.7,
     "fracture_threshold": 0.3
+  },
+  "world": {
+    "world_width": 2000,
+    "world_height": 2000,
+    "background_color": [20, 20, 30]
+  },
+  "kid_movement": {
+    "max_speed": 50.0,
+    "acceleration": 100.0,
+    "arrival_distance": 10.0,
+    "collision_radius": 15.0
+  },
+  "pathfinding": {
+    "grid_cell_size": 20,
+    "cache_lifetime": 5.0,
+    "max_path_length": 100
   }
 }

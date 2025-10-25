@@ -89,8 +89,14 @@ class Kid(BaseEntity):
         self.target_position: Optional[Vector2] = None
         self.target_house = None
         self.max_speed = 50.0  # pixels per second
+        self.collision_radius = 15.0  # pixels
         
-    def update(self, dt: float):
+        # Pathfinding
+        self.current_path: List[Vector2] = []
+        self.path_index = 0
+        self.use_pathfinding = True
+        
+    def update(self, dt: float, renderer=None):
         """Update kid state and behavior."""
         super().update(dt)
         
@@ -103,17 +109,21 @@ class Kid(BaseEntity):
         self.ai_tick_timer += dt
         
         # State-based behavior
-        self._update_state_behavior(dt)
+        self._update_state_behavior(dt, renderer)
     
-    def _update_state_behavior(self, dt: float):
+    def _update_state_behavior(self, dt: float, renderer=None):
         """Update behavior based on current state."""
         if self.state == KidState.MOVING_TO_HOUSE:
             if self.target_position:
-                if self.move_toward(self.target_position, self.max_speed, dt):
+                if self._move_with_pathfinding(self.target_position, self.max_speed, dt):
                     self.state = KidState.TRICK_OR_TREATING
                     self.trick_or_treat_timer = 2.0  # Spend 2 seconds trick-or-treating
         elif self.state == KidState.TRICK_OR_TREATING:
             if self.trick_or_treat_timer <= 0:
+                # Try to get candy from the house
+                if self.target_house:
+                    from ..ai.basic_behaviors import BasicBehaviors
+                    BasicBehaviors.execute_trick_or_treat(self, self.target_house, renderer)
                 self.state = KidState.IDLE
         elif self.state == KidState.SEEKING_TRADE:
             # Movement handled in AI tick
@@ -129,6 +139,10 @@ class Kid(BaseEntity):
         if not self.active:
             return
         
+        # Use basic behaviors for now
+        from ..ai.basic_behaviors import BasicBehaviors
+        BasicBehaviors.update_kid_behavior(self, world, 0.0)
+        
         # Check debt obligations first
         if self._has_overdue_debt():
             self._seek_debt_repayment(world)
@@ -138,13 +152,6 @@ class Kid(BaseEntity):
         if self.personal_goal and self.personal_goal.is_urgent():
             self._pursue_goal(world)
             return
-        
-        # Default: Trade or trick-or-treat
-        import random
-        if random.random() < 0.3:  # 30% chance to seek house
-            self._pick_new_house(world)
-        else:
-            self._seek_trade_partner(world)
     
     def _has_overdue_debt(self) -> bool:
         """Check if kid has overdue debt."""
@@ -165,8 +172,16 @@ class Kid(BaseEntity):
     
     def _pick_new_house(self, world):
         """Pick a new house to visit for trick-or-treating."""
-        # Placeholder implementation
-        self.state = KidState.IDLE
+        if not world.houses:
+            self.state = KidState.IDLE
+            return
+        
+        # Pick a random house
+        import random
+        target_house = random.choice(world.houses)
+        self.target_house = target_house
+        self.target_position = target_house.position
+        self.state = KidState.MOVING_TO_HOUSE
     
     def _seek_trade_partner(self, world):
         """Seek a trading partner."""
@@ -248,6 +263,97 @@ class Kid(BaseEntity):
         color = self._get_mood_color()
         pygame.draw.circle(screen, color, screen_pos.to_int_tuple(), 10)
     
+    def move_toward(self, target: Vector2, speed: float, dt: float) -> bool:
+        """
+        Move toward a target position.
+        
+        Args:
+            target: Target position to move toward
+            speed: Movement speed in units per second
+            dt: Delta time in seconds
+            
+        Returns:
+            True if reached target, False otherwise
+        """
+        if not target:
+            return True
+        
+        # Calculate direction to target
+        direction = target - self.position
+        distance = direction.length()
+        
+        # Check if we've reached the target
+        arrival_distance = 10.0  # Close enough to consider "arrived"
+        if distance <= arrival_distance:
+            return True
+        
+        # Move toward target
+        if distance > 0:
+            # Normalize direction and apply speed
+            move_distance = speed * dt
+            if move_distance >= distance:
+                # Would overshoot, just go to target
+                self.position = target
+                return True
+            else:
+                # Move partway toward target
+                self.position += direction.normalize() * move_distance
+        
+        return False
+    
+    def _move_with_pathfinding(self, target: Vector2, speed: float, dt: float) -> bool:
+        """
+        Move toward target using pathfinding.
+        
+        Args:
+            target: Target position to move toward
+            speed: Movement speed in units per second
+            dt: Delta time in seconds
+            
+        Returns:
+            True if reached target, False otherwise
+        """
+        if not target:
+            return True
+        
+        # Check if we need to find a new path
+        if not self.current_path or self.path_index >= len(self.current_path):
+            # Request path from world's pathfinding manager
+            # For now, fall back to direct movement if no pathfinding available
+            return self.move_toward(target, speed, dt)
+        
+        # Move along current path
+        current_waypoint = self.current_path[self.path_index]
+        
+        # Check if we've reached the current waypoint
+        if self.position.distance_to(current_waypoint) <= 10.0:
+            self.path_index += 1
+            
+            # If we've reached the end of the path, we're at the target
+            if self.path_index >= len(self.current_path):
+                return True
+        
+        # Move toward current waypoint
+        return self.move_toward(current_waypoint, speed, dt)
+    
+    def set_path(self, path: List[Vector2]):
+        """Set a new path for the kid to follow."""
+        self.current_path = path
+        self.path_index = 0
+    
+    def clear_path(self):
+        """Clear the current path."""
+        self.current_path = []
+        self.path_index = 0
+    
+    def reached_target(self) -> bool:
+        """Check if kid has reached their target position."""
+        if not self.target_position:
+            return True
+        
+        distance = self.position.distance_to(self.target_position)
+        return distance <= 10.0  # Arrival distance
+    
     def _get_mood_color(self) -> tuple:
         """Get color based on current mood."""
         mood_colors = {
@@ -258,3 +364,58 @@ class Kid(BaseEntity):
             Mood.PANIC: (255, 100, 100)
         }
         return mood_colors.get(self.mood, (255, 255, 255))
+    
+    def check_collision_with_kids(self, other_kids: List['Kid']) -> List['Kid']:
+        """
+        Check for collisions with other kids.
+        
+        Args:
+            other_kids: List of other kid entities to check against
+            
+        Returns:
+            List of kids this kid is colliding with
+        """
+        colliding_kids = []
+        
+        for other_kid in other_kids:
+            if other_kid == self or not other_kid.active:
+                continue
+            
+            distance = self.position.distance_to(other_kid.position)
+            min_distance = self.collision_radius + other_kid.collision_radius
+            
+            if distance < min_distance:
+                colliding_kids.append(other_kid)
+        
+        return colliding_kids
+    
+    def apply_separation_force(self, colliding_kids: List['Kid'], dt: float):
+        """
+        Apply separation force to avoid other kids.
+        
+        Args:
+            colliding_kids: List of kids this kid is colliding with
+            dt: Delta time
+        """
+        if not colliding_kids:
+            return
+        
+        separation_force = Vector2(0, 0)
+        
+        for other_kid in colliding_kids:
+            # Calculate direction away from other kid
+            direction = self.position - other_kid.position
+            distance = direction.length()
+            
+            if distance > 0:
+                # Normalize and scale by separation strength
+                direction = direction.normalized()
+                separation_strength = 100.0  # Force strength
+                force = direction * separation_strength
+                separation_force += force
+        
+        # Apply separation force to movement
+        if separation_force.length() > 0:
+            # Normalize and apply as movement offset
+            separation_force = separation_force.normalized()
+            self.position += separation_force * self.max_speed * dt * 0.5

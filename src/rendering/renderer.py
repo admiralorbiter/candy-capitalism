@@ -11,7 +11,10 @@ from ..entities.base_entity import BaseEntity
 from ..entities.kid import Kid
 from ..entities.house import House
 from .camera import Camera
+from .particle_system import ParticleSystem
 from ..core.constants import COLORS, SCREEN_SIZE
+from ..utils.vector2 import Vector2
+from ..ui.inventory_display import InventoryManager
 
 
 class Renderer:
@@ -30,7 +33,7 @@ class Renderer:
             screen: Pygame screen surface to render to
         """
         self.screen = screen
-        self.camera = Camera()
+        self.camera = Camera(Vector2(1000, 1000), 0.5)  # Center of 2000x2000 world, zoomed out
         
         # Rendering layers
         self.layers = {
@@ -42,7 +45,18 @@ class Renderer:
         
         # Sprite management
         self.sprite_cache: Dict[str, pygame.Surface] = {}
-        self.font_cache: Dict[tuple, pygame.Font] = {}
+        self.font_cache: Dict[tuple, pygame.font.Font] = {}
+        
+        # Debug overlay
+        self.debug_enabled = False
+        self.help_enabled = False
+        
+        # Particle system
+        self.particle_system = ParticleSystem()
+        
+        # Inventory display
+        self.inventory_manager = InventoryManager()
+        self.inventory_display_enabled = False
         
     def render_world(self, world, dt: float = 0.0):
         """
@@ -64,8 +78,25 @@ class Renderer:
         # Render effects layer
         self._render_effects()
         
+        # Update and render particles
+        self.particle_system.update(dt)
+        self.particle_system.render(self.screen, self.camera)
+        
         # Render UI layer
         self._render_ui()
+        
+        # Render debug overlay
+        if self.debug_enabled:
+            self._render_debug_overlay(world)
+        
+        # Render help overlay
+        if self.help_enabled:
+            self._render_help_overlay()
+        
+        # Render inventory display
+        if self.inventory_display_enabled:
+            font = self._get_font(14)
+            self.inventory_manager.render(self.screen, font)
     
     def _render_background(self):
         """Render background elements."""
@@ -105,22 +136,39 @@ class Renderer:
             40, 30
         )
         
-        # Choose color based on house state
+        # Choose color based on house state and quality
         if house.is_blessed():
-            color = COLORS['GREEN']
+            color = (100, 255, 100)  # Green for blessed
         elif house.is_cursed():
-            color = COLORS['RED']
+            color = (255, 100, 100)  # Red for cursed
         else:
-            color = COLORS['GRAY']
+            # Color based on quality level
+            if house.quality == 1:  # Low quality
+                color = (150, 150, 150)  # Gray
+            elif house.quality == 2:  # Mid quality
+                color = (139, 69, 19)  # Brown
+            else:  # High quality
+                color = (255, 215, 0)  # Gold
         
         pygame.draw.rect(self.screen, color, house_rect)
         pygame.draw.rect(self.screen, COLORS['BLACK'], house_rect, 2)
         
+        # Draw house quality indicator (letter)
+        font = self._get_font(16)
+        quality_letter = chr(ord('A') + house.quality - 1)  # A, B, C for quality 1, 2, 3
+        text_surface = font.render(quality_letter, True, COLORS['WHITE'])
+        text_rect = text_surface.get_rect(center=house_rect.center)
+        self.screen.blit(text_surface, text_rect)
+        
         # Draw power effect indicators
         if house.is_blessed() or house.is_cursed():
-            effect_color = COLORS['YELLOW'] if house.is_blessed() else COLORS['RED']
+            effect_color = (255, 255, 0) if house.is_blessed() else (255, 0, 0)
             pygame.draw.circle(self.screen, effect_color, 
                              screen_pos.to_int_tuple(), 25, 2)
+        
+        # Draw cooldown indicator
+        if house.dispense_cooldown > 0:
+            self._render_house_cooldown(house, screen_pos)
     
     def _render_kid(self, kid: Kid):
         """Render a kid entity."""
@@ -132,12 +180,19 @@ class Renderer:
         radius = 8
         
         pygame.draw.circle(self.screen, color, screen_pos.to_int_tuple(), radius)
+        pygame.draw.circle(self.screen, (0, 0, 0), screen_pos.to_int_tuple(), radius, 2)
         
-        # Draw mood indicator
-        self._render_mood_indicator(kid, screen_pos)
+        # Draw kid ID
+        font = self._get_font(12)
+        text_surface = font.render(kid.id, True, (255, 255, 255))
+        text_rect = text_surface.get_rect(center=(screen_pos.x, screen_pos.y - 20))
+        self.screen.blit(text_surface, text_rect)
         
-        # Draw inventory indicator
-        self._render_inventory_indicator(kid, screen_pos)
+        # Draw inventory count
+        self._render_inventory_count(kid, screen_pos)
+        
+        # Draw personality indicator
+        self._render_personality_indicator(kid, screen_pos)
     
     def _get_kid_color(self, kid: Kid) -> tuple:
         """Get color for a kid based on their state."""
@@ -168,6 +223,23 @@ class Renderer:
         
         # Position above kid
         text_rect = text_surface.get_rect(center=(screen_pos.x, screen_pos.y - 20))
+        self.screen.blit(text_surface, text_rect)
+    
+    def _render_inventory_count(self, kid: Kid, screen_pos):
+        """Render inventory count as text."""
+        if not kid.inventory:
+            return
+        
+        # Count total candy
+        total_candy = sum(kid.inventory.values())
+        if total_candy == 0:
+            return
+        
+        # Draw candy count
+        font = self._get_font(10)
+        text = f"{total_candy}"
+        text_surface = font.render(text, True, (255, 255, 255))
+        text_rect = text_surface.get_rect(center=(screen_pos.x, screen_pos.y + 15))
         self.screen.blit(text_surface, text_rect)
     
     def _render_inventory_indicator(self, kid: Kid, screen_pos):
@@ -231,7 +303,7 @@ class Renderer:
         # Placeholder for UI rendering
         pass
     
-    def _get_font(self, size: int) -> pygame.Font:
+    def _get_font(self, size: int) -> pygame.font.Font:
         """Get cached font."""
         if size not in self.font_cache:
             self.font_cache[size] = pygame.font.Font(None, size)
@@ -244,6 +316,204 @@ class Renderer:
     def get_camera(self) -> Camera:
         """Get the current camera."""
         return self.camera
+    
+    def _render_debug_overlay(self, world):
+        """Render debug information overlay."""
+        font = self._get_font(14)
+        y_offset = 10
+        
+        # FPS counter
+        fps_text = f"FPS: {pygame.time.Clock().get_fps():.1f}"
+        fps_surface = font.render(fps_text, True, (255, 255, 0))
+        self.screen.blit(fps_surface, (10, y_offset))
+        y_offset += 20
+        
+        # Kid count
+        kid_text = f"Kids: {len(world.kids)}"
+        kid_surface = font.render(kid_text, True, (255, 255, 0))
+        self.screen.blit(kid_surface, (10, y_offset))
+        y_offset += 20
+        
+        # House count
+        house_text = f"Houses: {len(world.houses)}"
+        house_surface = font.render(house_text, True, (255, 255, 0))
+        self.screen.blit(house_surface, (10, y_offset))
+        y_offset += 20
+        
+        # Pathfinding info
+        if world.pathfinding_manager:
+            path_text = f"Pathfinding: Active"
+            path_surface = font.render(path_text, True, (255, 255, 0))
+            self.screen.blit(path_surface, (10, y_offset))
+            y_offset += 20
+        
+        # Particle count
+        particle_text = f"Particles: {self.particle_system.get_particle_count()}"
+        particle_surface = font.render(particle_text, True, (255, 255, 0))
+        self.screen.blit(particle_surface, (10, y_offset))
+        y_offset += 20
+        
+        # House cooldowns
+        houses_on_cooldown = [h for h in world.houses if h.dispense_cooldown > 0]
+        cooldown_text = f"Houses on cooldown: {len(houses_on_cooldown)}"
+        cooldown_surface = font.render(cooldown_text, True, (255, 255, 0))
+        self.screen.blit(cooldown_surface, (10, y_offset))
+        y_offset += 20
+        
+        # Personality distribution
+        personality_counts = {}
+        for kid in world.kids:
+            personality = kid.personality.name
+            personality_counts[personality] = personality_counts.get(personality, 0) + 1
+        
+        personality_text = "Personalities: " + ", ".join([f"{k}: {v}" for k, v in personality_counts.items()])
+        personality_surface = font.render(personality_text, True, (255, 255, 0))
+        self.screen.blit(personality_surface, (10, y_offset))
+        y_offset += 20
+        
+        # Render kid paths
+        for kid in world.kids:
+            if kid.current_path and len(kid.current_path) > 1:
+                self._render_kid_path(kid)
+    
+    def _render_kid_path(self, kid):
+        """Render a kid's current path."""
+        if not kid.current_path or len(kid.current_path) < 2:
+            return
+        
+        # Convert path to screen coordinates
+        screen_path = []
+        for waypoint in kid.current_path:
+            screen_pos = self.camera.world_to_screen(waypoint)
+            screen_path.append(screen_pos.to_int_tuple())
+        
+        # Draw path as connected lines
+        if len(screen_path) > 1:
+            pygame.draw.lines(self.screen, (0, 255, 255), False, screen_path, 2)
+            
+            # Draw waypoints
+            for i, point in enumerate(screen_path):
+                color = (255, 0, 0) if i == kid.path_index else (0, 255, 255)
+                pygame.draw.circle(self.screen, color, point, 3)
+    
+    def toggle_debug(self):
+        """Toggle debug overlay on/off."""
+        self.debug_enabled = not self.debug_enabled
+    
+    def toggle_help(self):
+        """Toggle help overlay on/off."""
+        self.help_enabled = not self.help_enabled
+    
+    def _render_help_overlay(self):
+        """Render help overlay with controls."""
+        font = self._get_font(16)
+        y_offset = 10
+        
+        # Help title
+        title_text = "Candy Capitalism - Controls"
+        title_surface = font.render(title_text, True, (255, 255, 0))
+        self.screen.blit(title_surface, (10, y_offset))
+        y_offset += 30
+        
+        # Camera controls
+        controls = [
+            "Camera Movement:",
+            "  Arrow Keys - Pan around map",
+            "  Mouse Wheel - Zoom in/out",
+            "  +/- Keys - Zoom in/out",
+            "  R - Reset camera to center",
+            "",
+            "Debug:",
+            "  F3 - Toggle debug overlay",
+            "  H - Toggle this help",
+            "  I - Toggle inventory display",
+            "",
+            "Game:",
+            "  SPACE - Start game",
+            "  ESC - Quit"
+        ]
+        
+        for control in controls:
+            if control == "":
+                y_offset += 10
+                continue
+            
+            color = (255, 255, 255) if control.endswith(":") else (200, 200, 200)
+            text_surface = font.render(control, True, color)
+            self.screen.blit(text_surface, (10, y_offset))
+            y_offset += 20
+    
+    def _render_house_cooldown(self, house: House, screen_pos: Vector2):
+        """Render house cooldown indicator."""
+        # Draw cooldown progress bar above house
+        progress = house.get_cooldown_progress()
+        bar_width = 30
+        bar_height = 4
+        bar_x = screen_pos.x - bar_width // 2
+        bar_y = screen_pos.y - 25
+        
+        # Background (empty)
+        pygame.draw.rect(self.screen, (100, 100, 100), 
+                        (bar_x, bar_y, bar_width, bar_height))
+        
+        # Progress fill
+        fill_width = int(bar_width * progress)
+        if fill_width > 0:
+            color = (0, 255, 0) if progress > 0.8 else (255, 255, 0) if progress > 0.4 else (255, 0, 0)
+            pygame.draw.rect(self.screen, color, 
+                           (bar_x, bar_y, fill_width, bar_height))
+        
+        # Cooldown text
+        if house.dispense_cooldown > 0:
+            font = self._get_font(10)
+            cooldown_text = f"{house.dispense_cooldown:.1f}s"
+            text_surface = font.render(cooldown_text, True, (255, 255, 255))
+            text_rect = text_surface.get_rect(center=(screen_pos.x, bar_y - 8))
+            self.screen.blit(text_surface, text_rect)
+    
+    def _render_personality_indicator(self, kid: Kid, screen_pos: Vector2):
+        """Render personality indicator above kid."""
+        # Personality letter mapping
+        personality_letters = {
+            "VALUE_INVESTOR": "V",
+            "FOMO_CHASER": "F", 
+            "HOARDER": "H",
+            "DIVERSIFIER": "D",
+            "SOCIAL_TRADER": "S"
+        }
+        
+        letter = personality_letters.get(kid.personality.name, "?")
+        
+        # Draw background circle
+        circle_pos = (screen_pos.x, screen_pos.y - 35)
+        pygame.draw.circle(self.screen, (0, 0, 0), circle_pos, 8)
+        pygame.draw.circle(self.screen, (255, 255, 255), circle_pos, 8, 2)
+        
+        # Draw letter
+        font = self._get_font(12)
+        text_surface = font.render(letter, True, (255, 255, 255))
+        text_rect = text_surface.get_rect(center=circle_pos)
+        self.screen.blit(text_surface, text_rect)
+    
+    def emit_candy_particles(self, position: Vector2, candy_type: str = "chocolate"):
+        """Emit particles when candy is dispensed."""
+        self.particle_system.emit_candy_particles(position, candy_type)
+    
+    def toggle_inventory_display(self, world=None):
+        """Toggle inventory display on/off."""
+        self.inventory_display_enabled = not self.inventory_display_enabled
+        
+        if self.inventory_display_enabled:
+            self.inventory_manager.show_main_display()
+            # Auto-select first kid if available
+            if world and world.kids and not self.inventory_manager.selected_kid_id:
+                self.select_kid_for_inventory(world.kids[0])
+        else:
+            self.inventory_manager.hide_main_display()
+    
+    def select_kid_for_inventory(self, kid: Kid):
+        """Select a kid to show inventory for."""
+        self.inventory_manager.select_kid(kid)
     
     def clear_cache(self):
         """Clear sprite and font caches."""

@@ -1,0 +1,172 @@
+"""
+Particle system for visual effects.
+
+Provides particle effects for candy dispensing and other visual feedback.
+"""
+
+import random
+import math
+from typing import List, Tuple
+from ..utils.vector2 import Vector2
+
+
+class Particle:
+    """Individual particle with position, velocity, and lifetime."""
+    
+    def __init__(self, position: Vector2, velocity: Vector2, color: Tuple[int, int, int], lifetime: float):
+        self.position = position.copy()
+        self.velocity = velocity.copy()
+        self.color = color
+        self.lifetime = lifetime
+        self.max_lifetime = lifetime
+        self.active = True
+    
+    def update(self, dt: float) -> bool:
+        """
+        Update particle position and lifetime.
+        
+        Args:
+            dt: Delta time in seconds
+            
+        Returns:
+            True if particle is still active, False if expired
+        """
+        if not self.active:
+            return False
+        
+        # Update position
+        self.position += self.velocity * dt
+        
+        # Update lifetime
+        self.lifetime -= dt
+        
+        # Check if expired
+        if self.lifetime <= 0:
+            self.active = False
+            return False
+        
+        return True
+    
+    def get_alpha(self) -> int:
+        """Get alpha value based on lifetime (fade out)."""
+        if self.max_lifetime <= 0:
+            return 255
+        
+        alpha = int(255 * (self.lifetime / self.max_lifetime))
+        return max(0, min(255, alpha))
+
+
+class ParticleEmitter:
+    """Emits particles from a specific location."""
+    
+    def __init__(self, position: Vector2, particle_count: int = 5, spread: float = 50.0, 
+                 speed: float = 100.0, lifetime: float = 1.0, color: Tuple[int, int, int] = (255, 255, 0)):
+        self.position = position
+        self.particle_count = particle_count
+        self.spread = spread
+        self.speed = speed
+        self.lifetime = lifetime
+        self.color = color
+    
+    def emit(self) -> List[Particle]:
+        """Emit a burst of particles."""
+        particles = []
+        
+        for _ in range(self.particle_count):
+            # Random direction within spread
+            angle = random.uniform(0, 2 * math.pi)
+            direction = Vector2(math.cos(angle), math.sin(angle))
+            
+            # Add some randomness to speed
+            particle_speed = self.speed * random.uniform(0.5, 1.5)
+            velocity = direction * particle_speed
+            
+            # Add some randomness to lifetime
+            particle_lifetime = self.lifetime * random.uniform(0.7, 1.3)
+            
+            particle = Particle(self.position, velocity, self.color, particle_lifetime)
+            particles.append(particle)
+        
+        return particles
+
+
+class ParticleSystem:
+    """Manages all particles in the game."""
+    
+    def __init__(self):
+        self.particles: List[Particle] = []
+        self.max_particles = 200  # Limit for performance
+    
+    def add_particles(self, particles: List[Particle]):
+        """Add particles to the system."""
+        self.particles.extend(particles)
+        
+        # Limit total particles
+        if len(self.particles) > self.max_particles:
+            # Remove oldest particles
+            self.particles = self.particles[-self.max_particles:]
+    
+    def emit_candy_particles(self, position: Vector2, candy_type: str = "chocolate"):
+        """Emit particles for candy dispensing."""
+        # Color based on candy type
+        candy_colors = {
+            "chocolate": (139, 69, 19),    # Brown
+            "fruity": (255, 192, 203),     # Pink
+            "sour": (255, 255, 0),         # Yellow
+            "mint": (0, 255, 127),         # Green
+            "caramel": (255, 165, 0),      # Orange
+            "licorice": (75, 0, 130)       # Purple
+        }
+        
+        color = candy_colors.get(candy_type, (255, 255, 0))  # Default yellow
+        
+        emitter = ParticleEmitter(
+            position=position,
+            particle_count=8,
+            spread=60.0,
+            speed=80.0,
+            lifetime=1.5,
+            color=color
+        )
+        
+        particles = emitter.emit()
+        self.add_particles(particles)
+    
+    def update(self, dt: float):
+        """Update all particles."""
+        # Update particles and remove inactive ones
+        self.particles = [p for p in self.particles if p.update(dt)]
+    
+    def render(self, screen, camera):
+        """Render all particles."""
+        for particle in self.particles:
+            if not particle.active:
+                continue
+            
+            # Convert world position to screen position
+            screen_pos = camera.world_to_screen(particle.position)
+            
+            # Skip if off-screen
+            if (screen_pos.x < -10 or screen_pos.x > screen.get_width() + 10 or
+                screen_pos.y < -10 or screen_pos.y > screen.get_height() + 10):
+                continue
+            
+            # Get alpha for fading
+            alpha = particle.get_alpha()
+            
+            # Create surface with alpha
+            import pygame
+            particle_surface = pygame.Surface((8, 8), pygame.SRCALPHA)
+            color_with_alpha = (*particle.color, alpha)
+            pygame.draw.circle(particle_surface, color_with_alpha, (4, 4), 4)
+            
+            # Blit to screen
+            screen.blit(particle_surface, (screen_pos.x - 4, screen_pos.y - 4))
+    
+    def clear(self):
+        """Clear all particles."""
+        self.particles.clear()
+    
+    def get_particle_count(self) -> int:
+        """Get current particle count."""
+        return len(self.particles)

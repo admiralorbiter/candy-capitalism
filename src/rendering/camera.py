@@ -146,11 +146,11 @@ class Camera:
     
     def zoom_in(self, factor: float = 1.2):
         """Zoom in by a factor."""
-        self.set_zoom(self.target_zoom * factor)
+        self.set_zoom(self.target_zoom * factor, smooth=False)
     
     def zoom_out(self, factor: float = 1.2):
         """Zoom out by a factor."""
-        self.set_zoom(self.target_zoom / factor)
+        self.set_zoom(self.target_zoom / factor, smooth=False)
     
     def move_to(self, position: Vector2, smooth: bool = True):
         """Move camera to a specific position."""
