@@ -1,0 +1,30 @@
+{
+  "screen_width": 1280,
+  "screen_height": 720,
+  "fps": 60,
+  "ai_tick_rate": 2.0,
+  "spatial_grid_cell_size": 100,
+  "max_kids": 30,
+  "max_houses": 25,
+  "chaos_energy": {
+    "max_energy": 100.0,
+    "regen_rate": 1.0,
+    "drain_rate": 2.0
+  },
+  "trading": {
+    "trade_cooldown": 3.0,
+    "max_trade_distance": 150.0,
+    "price_discovery_rate": 0.01
+  },
+  "rumors": {
+    "spread_chance": 0.3,
+    "overhear_chance": 0.1,
+    "mutation_chance": 0.15,
+    "max_age": 60.0
+  },
+  "trading_blocs": {
+    "min_members": 3,
+    "formation_threshold": 0.7,
+    "fracture_threshold": 0.3
+  }
+}
