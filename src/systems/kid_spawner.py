@@ -58,7 +58,7 @@ class KidSpawner:
             kid = Kid(kid_id, position)
             
             # Assign random properties
-            self._assign_random_properties(kid, i)
+            self._assign_random_properties(kid, i, world)
             
             # Add to world
             world.add_kid(kid)
@@ -104,13 +104,14 @@ class KidSpawner:
         print("Warning: Could not find valid spawn position, using world center")
         return Vector2(world_width // 2, world_height // 2)
     
-    def _assign_random_properties(self, kid: Kid, index: int):
+    def _assign_random_properties(self, kid: Kid, index: int, world=None):
         """
         Assign random properties to a kid.
         
         Args:
             kid: Kid entity to assign properties to
             index: Index of the kid (for consistent color assignment)
+            world: GameWorld instance (for economy access)
         """
         # Assign personality
         personalities = list(PersonalityType)
@@ -124,11 +125,18 @@ class KidSpawner:
         kid.color = self.kid_colors[index % len(self.kid_colors)]
         
         # Initialize preferences (random values 0-1 for each candy type)
-        candy_types = ["chocolate", "fruity", "sour", "novelty", "health", "trash"]
+        # Use uppercase to match config file
+        candy_types = ["CHOCOLATE", "FRUITY", "SOUR", "NOVELTY", "HEALTH", "TRASH"]
         kid.preferences = {candy: random.uniform(0.0, 1.0) for candy in candy_types}
         
-        # Initialize believed values (random values 0.5-5.0)
-        kid.believed_values = {candy: random.uniform(0.5, 5.0) for candy in candy_types}
+        # Initialize believed values based on economy settings
+        if world and world.economy and hasattr(kid, 'initialize_believed_values'):
+            # Get price discovery mode from economy settings
+            mode = world.economy.settings.get('price_discovery_mode', 'fixed')
+            kid.initialize_believed_values(world.economy, mode)
+        else:
+            # Fallback: random values
+            kid.believed_values = {candy: random.uniform(0.5, 5.0) for candy in candy_types}
         
         # Give some initial candy
         self._give_initial_candy(kid)
@@ -138,7 +146,8 @@ class KidSpawner:
     
     def _give_initial_candy(self, kid: Kid):
         """Give kid some initial candy based on their preferences."""
-        candy_types = ["chocolate", "fruity", "sour", "novelty", "health", "trash"]
+        # Use uppercase to match config file
+        candy_types = ["CHOCOLATE", "FRUITY", "SOUR", "NOVELTY", "HEALTH", "TRASH"]
         
         # Give 2-5 pieces of random candy
         num_pieces = random.randint(2, 5)

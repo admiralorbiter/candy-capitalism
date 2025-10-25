@@ -95,6 +95,64 @@ class Kid(BaseEntity):
         self.current_path: List[Vector2] = []
         self.path_index = 0
         self.use_pathfinding = True
+    
+    def initialize_believed_values(self, economy, mode: str = "fixed"):
+        """
+        Initialize believed values based on price discovery mode.
+        
+        Args:
+            economy: Economy system with real values
+            mode: "fixed", "random", or "convergent"
+        """
+        import random
+        
+        if mode == "fixed":
+            # Kids know the true values
+            self.believed_values = economy.real_values.copy()
+        elif mode == "random":
+            # Kids have random beliefs (0.5 to 5.0 range)
+            self.believed_values = {}
+            for candy_type in economy.real_values.keys():
+                self.believed_values[candy_type] = random.uniform(0.5, 5.0)
+        elif mode == "convergent":
+            # Start random but will converge through trading
+            self.believed_values = {}
+            for candy_type in economy.real_values.keys():
+                # Start with some variation around real value
+                real_value = economy.real_values[candy_type]
+                variation = random.uniform(0.5, 1.5)  # 50% to 150% of real value
+                self.believed_values[candy_type] = real_value * variation
+        else:
+            # Default to fixed
+            self.believed_values = economy.real_values.copy()
+    
+    def update_beliefs_from_trade(self, trade_offer: Dict[str, int], trade_request: Dict[str, int], 
+                                 economy, learning_rate: float = 0.1):
+        """
+        Update believed values based on a completed trade.
+        
+        Args:
+            trade_offer: What this kid offered
+            trade_request: What this kid requested
+            economy: Economy system
+            learning_rate: How fast to adjust beliefs (0.0 to 1.0)
+        """
+        # Calculate the implied price from the trade
+        # If we offered 1 CHOCOLATE for 1 FRUITY, implied price of FRUITY = CHOCOLATE_value
+        for offered_candy, offered_qty in trade_offer.items():
+            for requested_candy, requested_qty in trade_request.items():
+                if offered_qty > 0 and requested_qty > 0:
+                    # Implied price: 1 requested_candy = (offered_value / requested_qty)
+                    offered_value = self.believed_values.get(offered_candy, economy.get_real_value(offered_candy))
+                    implied_price = (offered_value * offered_qty) / requested_qty
+                    
+                    # Update belief toward implied price
+                    current_belief = self.believed_values.get(requested_candy, economy.get_real_value(requested_candy))
+                    new_belief = current_belief + learning_rate * (implied_price - current_belief)
+                    
+                    # Keep within reasonable bounds
+                    new_belief = max(0.1, min(10.0, new_belief))
+                    self.believed_values[requested_candy] = new_belief
         
     def update(self, dt: float, renderer=None):
         """Update kid state and behavior."""
@@ -188,19 +246,92 @@ class Kid(BaseEntity):
         # Placeholder implementation
         self.state = KidState.IDLE
     
-    def evaluate_trade(self, offer: Dict[str, int], request: Dict[str, int]) -> float:
+    def evaluate_trade(self, offer: Dict[str, int], request: Dict[str, int], 
+                      economy) -> float:
         """
         Evaluate a trade proposal.
         
         Args:
             offer: What this kid would give
             request: What this kid would receive
+            economy: Economy system for real values
             
         Returns:
             Trade score (>0 = accept, <0 = reject)
         """
-        # Placeholder implementation
-        return 0.0
+        # Calculate value of what we'd give vs what we'd receive
+        # Using believed values, not real values
+        give_value = self._calculate_value(offer, economy)
+        receive_value = self._calculate_value(request, economy)
+        
+        # Base trade score is the difference
+        base_score = receive_value - give_value
+        
+        # Apply personality modifier
+        personality_modifier = self._get_personality_threshold()
+        
+        # Apply mood modifier
+        mood_modifier = self._get_mood_modifier()
+        
+        # Apply preference modifier (we prefer candy we like)
+        preference_modifier = self._get_preference_modifier(request, offer)
+        
+        # Final score combines all modifiers
+        final_score = base_score * personality_modifier * mood_modifier + preference_modifier
+        
+        return final_score
+    
+    def _calculate_value(self, candy_dict: Dict[str, int], economy) -> float:
+        """Calculate value of candy using believed values."""
+        total_value = 0.0
+        for candy_type, quantity in candy_dict.items():
+            # Use believed value if available, otherwise real value
+            if candy_type in self.believed_values:
+                value = self.believed_values[candy_type]
+            else:
+                value = economy.get_real_value(candy_type)
+            
+            total_value += value * quantity
+        
+        return total_value
+    
+    def _get_personality_threshold(self) -> float:
+        """Get trade threshold based on personality."""
+        thresholds = {
+            PersonalityType.VALUE_INVESTOR: 1.3,      # Stricter, want good deals
+            PersonalityType.MOMENTUM_TRADER: 1.0,     # Average threshold
+            PersonalityType.HOARDER: 1.5,             # Very strict, rarely trade
+            PersonalityType.SOCIAL_TRADER: 0.7,       # Lenient, trade more freely
+            PersonalityType.PANIC_SELLER: 0.5,        # Very lenient, trade anything
+        }
+        return thresholds.get(self.personality, 1.0)
+    
+    def _get_mood_modifier(self) -> float:
+        """Get trade modifier based on mood."""
+        modifiers = {
+            Mood.HAPPY: 0.9,      # A bit more generous
+            Mood.NEUTRAL: 1.0,    # Normal
+            Mood.ANXIOUS: 1.2,    # More cautious, need better deals
+            Mood.GREEDY: 1.3,     # Very strict, only good deals
+            Mood.PANIC: 0.5,      # Panic selling, accept bad deals
+        }
+        return modifiers.get(self.mood, 1.0)
+    
+    def _get_preference_modifier(self, request: Dict[str, int], offer: Dict[str, int]) -> float:
+        """Calculate preference-based modifier for the trade."""
+        # Bonus for receiving candy we like
+        request_bonus = 0.0
+        for candy_type, quantity in request.items():
+            preference = self.preferences.get(candy_type, 0.5)
+            request_bonus += preference * quantity * 0.5
+        
+        # Penalty for giving away candy we like
+        offer_penalty = 0.0
+        for candy_type, quantity in offer.items():
+            preference = self.preferences.get(candy_type, 0.5)
+            offer_penalty += preference * quantity * 0.3
+        
+        return request_bonus - offer_penalty
     
     def hear_rumor(self, rumor):
         """Process a rumor and update beliefs."""

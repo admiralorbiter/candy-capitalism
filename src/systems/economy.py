@@ -9,6 +9,7 @@ from typing import Dict, List, Any, Optional, Deque
 from collections import deque
 import time
 from ..entities.kid import Kid
+from ..core.config_manager import config_manager
 
 
 class Trade:
@@ -33,8 +34,43 @@ class Economy:
     
     def __init__(self):
         """Initialize the economy system."""
-        # Value tracking
-        self.real_values = {
+        # Load real values from config
+        self.real_values = self._load_real_values()
+        
+        # Load economy settings
+        self.settings = self._load_economy_settings()
+        
+        # Market history (for price calculations)
+        history_window = self.settings.get('market_history_window', 20)
+        self.trade_history: Deque[Trade] = deque(maxlen=history_window)
+        self.market_prices: Dict[str, float] = {}
+        
+        # Price discovery
+        self.discovery_active = True
+        self.discovery_progress = 0.0
+        self.discovery_rate = self.settings.get('convergence_rate', 0.1)
+        
+        # Market state
+        self.volatility = 1.0  # Market volatility multiplier
+        self.trend_strength = 0.0  # Current trend strength
+    
+    def _load_real_values(self) -> Dict[str, float]:
+        """Load real values from candy types config."""
+        try:
+            if not config_manager.configs:
+                config_manager.load_all()
+            
+            candy_config = config_manager.get('candy_types')
+            if candy_config:
+                real_values = {}
+                for candy_key, properties in candy_config.items():
+                    real_values[candy_key] = properties.get('real_value', 5.0)
+                return real_values
+        except Exception as e:
+            print(f"Warning: Could not load real values from config: {e}")
+        
+        # Fallback values
+        return {
             'CHOCOLATE': 8.0,
             'FRUITY': 5.0,
             'SOUR': 6.0,
@@ -42,19 +78,26 @@ class Economy:
             'HEALTH': 2.0,
             'TRASH': 1.0,
         }
+    
+    def _load_economy_settings(self) -> Dict[str, Any]:
+        """Load economy settings from game settings config."""
+        try:
+            if not config_manager.configs:
+                config_manager.load_all()
+            
+            game_settings = config_manager.get('game_settings')
+            if game_settings and 'economy' in game_settings:
+                return game_settings['economy']
+        except Exception as e:
+            print(f"Warning: Could not load economy settings: {e}")
         
-        # Market history (for price calculations)
-        self.trade_history: Deque[Trade] = deque(maxlen=100)  # Last 100 trades
-        self.market_prices: Dict[str, float] = {}
-        
-        # Price discovery
-        self.discovery_active = True
-        self.discovery_progress = 0.0
-        self.discovery_rate = 0.01  # Per tick
-        
-        # Market state
-        self.volatility = 1.0  # Market volatility multiplier
-        self.trend_strength = 0.0  # Current trend strength
+        # Default settings
+        return {
+            'price_discovery_mode': 'fixed',
+            'convergence_rate': 0.1,
+            'market_history_window': 20,
+            'enable_multi_item_trades': True
+        }
         
     def update(self, dt: float):
         """

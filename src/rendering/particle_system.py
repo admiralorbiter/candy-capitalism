@@ -132,6 +132,65 @@ class ParticleSystem:
         particles = emitter.emit()
         self.add_particles(particles)
     
+    def emit_trade_particles(self, kid1_pos: Vector2, kid2_pos: Vector2, 
+                            offer: dict, request: dict):
+        """Emit particles for a trade between two kids."""
+        # Create particles that move between the two kids
+        mid_point = Vector2(
+            (kid1_pos.x + kid2_pos.x) / 2,
+            (kid1_pos.y + kid2_pos.y) / 2
+        )
+        
+        # Emit particles for each candy type in the trade
+        all_trade_items = {**offer, **request}
+        
+        for candy_type, quantity in all_trade_items.items():
+            # Get color for this candy type
+            color = self._get_candy_color(candy_type)
+            
+            # Create particles that move from kid1 to kid2
+            for _ in range(min(quantity, 3)):  # Max 3 particles per candy type
+                # Random position between kids
+                t = random.uniform(0.2, 0.8)
+                start_pos = Vector2(
+                    kid1_pos.x + (kid2_pos.x - kid1_pos.x) * t,
+                    kid1_pos.y + (kid2_pos.y - kid1_pos.y) * t
+                )
+                
+                # Velocity toward the other kid
+                direction = (kid2_pos - kid1_pos).normalized()
+                velocity = direction * random.uniform(50, 100)
+                
+                particle = Particle(start_pos, velocity, color, 2.0)
+                self.particles.append(particle)
+    
+    def emit_trade_success_particles(self, position: Vector2):
+        """Emit celebration particles for successful trade."""
+        # Golden sparkles
+        emitter = ParticleEmitter(
+            position=position,
+            particle_count=12,
+            spread=80.0,
+            speed=60.0,
+            lifetime=2.0,
+            color=(255, 215, 0)  # Gold
+        )
+        
+        particles = emitter.emit()
+        self.add_particles(particles)
+    
+    def _get_candy_color(self, candy_type: str) -> Tuple[int, int, int]:
+        """Get color for a candy type."""
+        candy_colors = {
+            "CHOCOLATE": (139, 69, 19),    # Brown
+            "FRUITY": (255, 192, 203),     # Pink
+            "SOUR": (255, 255, 0),         # Yellow
+            "NOVELTY": (255, 165, 0),      # Orange
+            "HEALTH": (0, 255, 127),       # Green
+            "TRASH": (128, 128, 128)       # Gray
+        }
+        return candy_colors.get(candy_type, (255, 255, 255))  # Default white
+    
     def update(self, dt: float):
         """Update all particles."""
         # Update particles and remove inactive ones

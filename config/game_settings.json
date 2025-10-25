@@ -14,7 +14,16 @@
   "trading": {
     "trade_cooldown": 3.0,
     "max_trade_distance": 150.0,
-    "price_discovery_rate": 0.01
+    "price_discovery_rate": 0.01,
+    "trade_check_interval": 2.0,
+    "trade_range": 150,
+    "min_trade_value_delta": 0.5
+  },
+  "economy": {
+    "price_discovery_mode": "fixed",
+    "convergence_rate": 0.1,
+    "market_history_window": 20,
+    "enable_multi_item_trades": false
   },
   "rumors": {
     "spread_chance": 0.3,

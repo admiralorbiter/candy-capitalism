@@ -12,6 +12,10 @@ from .game_state import GameState, GameStateMachine, BaseState
 from .config_manager import config_manager
 from ..systems.game_world import GameWorld
 from ..rendering.renderer import Renderer
+from ..rendering.particle_system import ParticleSystem
+from ..rendering.floating_text import FloatingTextSystem
+from ..ui.market_ticker import MarketTicker
+from ..ui.economy_debug import EconomyDebugOverlay
 from ..utils.vector2 import Vector2
 
 
@@ -156,11 +160,22 @@ class PlayingState(BaseState):
         self.world = GameWorld()
         self.renderer = None
         self.initialized = False
+        
+        # UI elements
+        self.particle_system = ParticleSystem()
+        self.floating_text_system = FloatingTextSystem()
+        self.market_ticker = MarketTicker(SCREEN_SIZE[0], SCREEN_SIZE[1])
+        self.economy_debug = EconomyDebugOverlay(SCREEN_SIZE[0], SCREEN_SIZE[1])
     
     def on_enter(self, data=None):
         print("Entered playing state")
         if not self.initialized:
             self.renderer = Renderer(pygame.display.get_surface())
+            
+            # Add UI systems to renderer for trade effects
+            self.renderer.particle_system = self.particle_system
+            self.renderer.floating_text_system = self.floating_text_system
+            
             # Generate the map
             self.world.generate_map("default")
             # Spawn kids
@@ -172,6 +187,11 @@ class PlayingState(BaseState):
         """Update the playing state."""
         if self.world:
             self.world.update(dt, self.renderer)
+            
+            # Update UI elements
+            self.particle_system.update(dt)
+            self.floating_text_system.update(dt)
+            self.market_ticker.update(dt, self.world.economy)
     
     def handle_event(self, event):
         """Handle input events for playing state."""
@@ -190,6 +210,10 @@ class PlayingState(BaseState):
                 # Toggle inventory display
                 if self.renderer:
                     self.renderer.toggle_inventory_display(self.world)
+                return True
+            elif event.key == pygame.K_e:
+                # Toggle economy debug overlay
+                self.economy_debug.toggle()
                 return True
             
             # Camera movement (panning)
@@ -259,6 +283,14 @@ class PlayingState(BaseState):
         """Render the playing state."""
         if self.world and self.renderer:
             self.renderer.render_world(self.world)
+            
+            # Render UI elements
+            self.particle_system.render(screen, self.renderer.camera)
+            self.floating_text_system.render(screen, self.renderer.camera)
+            self.market_ticker.render(screen)
+            
+            # Render debug overlay
+            self.economy_debug.render(screen, self.world.economy, self.world.kids, self.renderer.camera)
         else:
             # Fallback rendering
             font = pygame.font.Font(None, 36)

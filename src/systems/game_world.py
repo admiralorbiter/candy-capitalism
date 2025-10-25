@@ -32,8 +32,9 @@ class GameWorld:
         self.houses: List[House] = []
         self.trading_blocs: List[TradingBloc] = []
         
-        # Systems (will be initialized in later sprints)
-        self.economy = None  # Economy system
+        # Systems
+        from .economy import Economy
+        self.economy = Economy()  # Initialize economy system
         self.possession_system = None  # Possession system
         self.rumor_system = None  # Rumor system
         self.event_system = None  # Event system

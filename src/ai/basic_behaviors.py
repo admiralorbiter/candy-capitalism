@@ -226,7 +226,10 @@ class BasicBehaviors:
             dt: Delta time
         """
         if kid.state == KidState.IDLE:
-            if BasicBehaviors.should_seek_new_house(kid):
+            # Decide whether to trade or visit house
+            if BasicBehaviors.should_seek_trade(kid, world):
+                kid.state = KidState.SEEKING_TRADE
+            elif BasicBehaviors.should_seek_new_house(kid):
                 house = BasicBehaviors.select_house(kid, world)
                 if house and BasicBehaviors.should_visit_house(kid, house):
                     kid.target_house = house
@@ -258,6 +261,290 @@ class BasicBehaviors:
                 kid.clear_path()
         
         elif kid.state == KidState.SEEKING_TRADE:
-            # For now, just go to idle after a while
-            # Later this will involve finding trading partners
+            # Try to find trading partners and make trades
+            BasicBehaviors.attempt_trade(kid, world)
+    
+    @staticmethod
+    def should_seek_trade(kid: Kid, world) -> bool:
+        """
+        Determine if kid should seek a trade.
+        
+        Args:
+            kid: Kid entity
+            world: GameWorld instance
+            
+        Returns:
+            True if kid should seek a trade
+        """
+        # Must have candy to trade
+        if not kid.inventory:
+            return False
+        
+        # Check cooldown
+        if kid.trade_cooldown > 0:
+            return False
+        
+        # Must have at least 2 pieces of candy to consider trading
+        total_candy = sum(kid.inventory.values())
+        if total_candy < 2:
+            return False
+        
+        # Probability based on personality
+        trade_probability = {
+            "VALUE_INVESTOR": 0.4,    # Moderate
+            "MOMENTUM_TRADER": 0.7,   # High
+            "HOARDER": 0.1,           # Very low
+            "SOCIAL_TRADER": 0.8,     # Very high
+            "PANIC_SELLER": 0.6,      # High
+        }
+        
+        personality_name = kid.personality.name
+        base_prob = trade_probability.get(personality_name, 0.5)
+        
+        # Mood modifier
+        if kid.mood.name == "HAPPY":
+            base_prob *= 1.2
+        elif kid.mood.name == "ANXIOUS":
+            base_prob *= 1.5  # Anxious kids trade more
+        elif kid.mood.name == "PANIC":
+            base_prob *= 2.0  # Panic sellers trade a lot
+        
+        return random.random() < min(1.0, base_prob)
+    
+    @staticmethod
+    def attempt_trade(kid: Kid, world):
+        """
+        Attempt to find a trading partner and execute a trade.
+        
+        Args:
+            kid: Kid entity seeking to trade
+            world: GameWorld instance
+        """
+        # Get nearby kids from spatial grid
+        nearby_kids = world.spatial_grid.get_nearby(kid.position, 150.0)
+        
+        # Filter to valid trading partners
+        valid_partners = []
+        for other_kid in nearby_kids:
+            if not isinstance(other_kid, Kid):
+                continue
+            if other_kid == kid:
+                continue
+            if not other_kid.active:
+                continue
+            if other_kid.state == KidState.IN_TRADE:
+                continue  # Don't interrupt ongoing trades
+            if not other_kid.inventory:
+                continue  # Must have candy
+            valid_partners.append(other_kid)
+        
+        if not valid_partners:
             kid.state = KidState.IDLE
+            return
+        
+        # Pick a random partner
+        partner = random.choice(valid_partners)
+        
+        # Generate a simple 1-for-1 trade proposal
+        trade_offer, trade_request = BasicBehaviors._generate_trade_proposal(kid, partner)
+        
+        if not trade_offer or not trade_request:
+            kid.state = KidState.IDLE
+            return
+        
+        # Evaluate the trade from partner's perspective
+        if world.economy:
+            partner_score = partner.evaluate_trade(trade_offer, trade_request, world.economy)
+            
+            # If partner accepts, execute the trade
+            if partner_score > 0:
+                BasicBehaviors._execute_trade(kid, partner, trade_offer, trade_request, world)
+                kid.trade_cooldown = 3.0  # 3 second cooldown
+        
+        kid.state = KidState.IDLE
+    
+    @staticmethod
+    def _generate_trade_proposal(kid: Kid, partner: Kid):
+        """
+        Generate a trade proposal (1-for-1 or multi-item based on settings).
+        
+        Args:
+            kid: Kid making the proposal
+            partner: Potential trading partner
+            
+        Returns:
+            Tuple of (offer_dict, request_dict) or (None, None) if can't propose
+        """
+        # Check if multi-item trades are enabled
+        multi_item_enabled = True  # Default to enabled
+        if hasattr(kid, 'world') and kid.world and kid.world.economy:
+            multi_item_enabled = kid.world.economy.settings.get('enable_multi_item_trades', True)
+        
+        if multi_item_enabled and random.random() < 0.3:  # 30% chance for multi-item
+            return BasicBehaviors._generate_multi_item_proposal(kid, partner)
+        else:
+            return BasicBehaviors._generate_single_item_proposal(kid, partner)
+    
+    @staticmethod
+    def _generate_single_item_proposal(kid: Kid, partner: Kid):
+        """Generate a simple 1-for-1 trade proposal."""
+        # Pick a candy we have to offer
+        available_to_give = [(candy, qty) for candy, qty in kid.inventory.items() if qty > 0]
+        if not available_to_give:
+            return None, None
+        
+        offer_candy, offer_qty = random.choice(available_to_give)
+        offer = {offer_candy: 1}
+        
+        # Pick a candy the partner has that we want
+        partner_candies = [(candy, qty) for candy, qty in partner.inventory.items() if qty > 0]
+        if not partner_candies:
+            return None, None
+        
+        # Score potential requests based on our preferences
+        scored_requests = []
+        for candy, qty in partner_candies:
+            preference = kid.preferences.get(candy, 0.5)
+            we_have = kid.inventory.get(candy, 0)
+            # Want candy we prefer and don't have much of
+            score = preference * (1.0 if we_have == 0 else 0.5)
+            scored_requests.append((candy, score))
+        
+        # Pick highest scored request
+        if scored_requests:
+            request_candy = max(scored_requests, key=lambda x: x[1])[0]
+            request = {request_candy: 1}
+        else:
+            # Fallback: just pick any candy
+            request_candy, _ = random.choice(partner_candies)
+            request = {request_candy: 1}
+        
+        return offer, request
+    
+    @staticmethod
+    def _generate_multi_item_proposal(kid: Kid, partner: Kid):
+        """Generate a multi-item trade proposal."""
+        # Pick 1-3 candies we have to offer
+        available_to_give = [(candy, qty) for candy, qty in kid.inventory.items() if qty > 0]
+        if not available_to_give:
+            return None, None
+        
+        num_offer_items = min(random.randint(1, 3), len(available_to_give))
+        offer_items = random.sample(available_to_give, num_offer_items)
+        
+        offer = {}
+        for candy, qty in offer_items:
+            # Offer 1-2 pieces of each candy
+            offer_qty = min(random.randint(1, 2), qty)
+            offer[candy] = offer_qty
+        
+        # Pick 1-3 candies the partner has that we want
+        partner_candies = [(candy, qty) for candy, qty in partner.inventory.items() if qty > 0]
+        if not partner_candies:
+            return None, None
+        
+        num_request_items = min(random.randint(1, 3), len(partner_candies))
+        request_items = random.sample(partner_candies, num_request_items)
+        
+        request = {}
+        for candy, qty in request_items:
+            # Request 1-2 pieces of each candy
+            request_qty = min(random.randint(1, 2), qty)
+            request[candy] = request_qty
+        
+        return offer, request
+    
+    @staticmethod
+    def _execute_trade(kid: Kid, partner: Kid, offer: dict, request: dict, world):
+        """
+        Execute a trade between two kids.
+        
+        Args:
+            kid: First kid (proposer)
+            partner: Second kid (accepter)
+            offer: What kid is offering
+            request: What kid is requesting
+            world: GameWorld instance
+        """
+        # Verify both kids have the required candy
+        for candy_type, quantity in offer.items():
+            if not kid.has_candy(candy_type, quantity):
+                return  # Can't execute, kid doesn't have the candy
+        
+        for candy_type, quantity in request.items():
+            if not partner.has_candy(candy_type, quantity):
+                return  # Can't execute, partner doesn't have the candy
+        
+        # Execute the swap
+        for candy_type, quantity in offer.items():
+            kid.remove_candy(candy_type, quantity)
+            partner.add_candy(candy_type, quantity)
+        
+        for candy_type, quantity in request.items():
+            partner.remove_candy(candy_type, quantity)
+            kid.add_candy(candy_type, quantity)
+        
+        # Record trade in economy
+        if world.economy:
+            # Simple price calculation: quantity of offer candy
+            for candy_type in offer.keys():
+                world.economy.record_trade(candy_type, 1.0, kid.id, partner.id)
+        
+        # Update beliefs from trade (price discovery)
+        if hasattr(kid, 'update_beliefs_from_trade') and world.economy:
+            learning_rate = world.economy.settings.get('convergence_rate', 0.1)
+            kid.update_beliefs_from_trade(offer, request, world.economy, learning_rate)
+            partner.update_beliefs_from_trade(request, offer, world.economy, learning_rate)
+        
+        # Visual effects for trade
+        BasicBehaviors._emit_trade_effects(kid, partner, offer, request, world)
+        
+        # Record in kid's recent trades
+        kid.recent_trades.append({
+            "partner": partner.id,
+            "offer": offer.copy(),
+            "request": request.copy()
+        })
+        partner.recent_trades.append({
+            "partner": kid.id,
+            "offer": request.copy(),  # From partner's perspective
+            "request": offer.copy()
+        })
+        
+        # Keep only last 10 trades
+        if len(kid.recent_trades) > 10:
+            kid.recent_trades.pop(0)
+        if len(partner.recent_trades) > 10:
+            partner.recent_trades.pop(0)
+        
+        print(f"Trade: {kid.id} <-> {partner.id}")
+    
+    @staticmethod
+    def _emit_trade_effects(kid: Kid, partner: Kid, offer: dict, request: dict, world):
+        """Emit visual effects for a completed trade."""
+        # Get renderer from world (if available)
+        renderer = getattr(world, 'renderer', None)
+        if not renderer:
+            return
+        
+        # Emit particle effects
+        if hasattr(renderer, 'particle_system'):
+            # Trade particles between kids
+            renderer.particle_system.emit_trade_particles(
+                kid.position, partner.position, offer, request
+            )
+            
+            # Success particles at midpoint
+            mid_point = Vector2(
+                (kid.position.x + partner.position.x) / 2,
+                (kid.position.y + partner.position.y) / 2
+            )
+            renderer.particle_system.emit_trade_success_particles(mid_point)
+        
+        # Emit floating text
+        if hasattr(renderer, 'floating_text_system'):
+            mid_point = Vector2(
+                (kid.position.x + partner.position.x) / 2,
+                (kid.position.y + partner.position.y) / 2
+            )
+            renderer.floating_text_system.add_trade_text(mid_point, offer, request)
