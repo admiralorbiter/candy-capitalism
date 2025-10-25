@@ -25,26 +25,43 @@
 - [x] Config loading works
 - [x] Documentation clearly explains development approach
 
-## Sprint 1: Core World & Movement (Weeks 1-2)
+## Sprint 1: Core World & Movement ✅ COMPLETED
 
 ### Goals
-- [ ] Create neighborhood map
-- [ ] Implement kid entities with autonomous movement
-- [ ] Basic rendering and camera
+- [x] Create neighborhood map
+- [x] Implement kid entities with autonomous movement
+- [x] Basic rendering and camera
 
 ### Deliverables
-- [ ] Grid-based neighborhood (15-20 houses)
-- [ ] House entities that spawn candy periodically
-- [ ] Kid entities that move autonomously
-- [ ] Simple pathfinding (A* or waypoint-based)
-- [ ] Top-down camera view
-- [ ] Basic sprite rendering
+- [x] Grid-based neighborhood (15-20 houses)
+- [x] House entities that spawn candy periodically
+- [x] Kid entities that move autonomously
+- [x] Simple pathfinding (A* or waypoint-based)
+- [x] Top-down camera view
+- [x] Basic sprite rendering
 
 ### Success Criteria
-- [ ] 10 kids move around neighborhood automatically
-- [ ] Kids pathfind to houses and "trick-or-treat"
-- [ ] Runs at 60 FPS with 10+ kids
-- [ ] Can visually distinguish kids and houses
+- [x] 10 kids move around neighborhood automatically
+- [x] Kids pathfind to houses and "trick-or-treat"
+- [x] Runs at 60 FPS with 10+ kids
+- [x] Can visually distinguish kids and houses
+
+### Polish Features Added
+- [x] Particle effects for candy dispensing
+- [x] House cooldown visualization with progress bars
+- [x] Inventory UI with candy breakdown (toggle with 'I' key)
+- [x] Personality indicators on kids
+- [x] Kid collision detection and separation
+- [x] Enhanced debug overlay with comprehensive information
+- [x] Camera controls (arrow keys, zoom, mouse wheel)
+- [x] Help overlay (toggle with 'H' key)
+
+### Testing
+- [x] 178 tests passing (100% pass rate)
+- [x] Unit tests for all core systems
+- [x] Integration tests for complete workflows
+- [x] Performance tests with reasonable thresholds
+- [x] Manual testing scenarios documented
 
 ## Sprint 2: Core Trading System (Weeks 3-4)
 
@@ -253,9 +270,10 @@
 
 ### Current Status
 - **Sprint 0**: ✅ COMPLETED
-- **Next**: Sprint 1 - Core World & Movement
+- **Sprint 1**: ✅ COMPLETED
+- **Next**: Sprint 2 - Core Trading System
 - **Timeline**: 18 weeks total (4.5 months)
-- **Current Phase**: Foundation complete, ready for core gameplay
+- **Current Phase**: Core world and movement complete, ready for trading system
 
 ### Key Decisions Made
 - Python 3.12.0 (system version)
