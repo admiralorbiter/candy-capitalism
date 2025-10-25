@@ -56,8 +56,8 @@ class TestTradingSystem:
         request = {"FRUITY": 1}
         
         # Both kids should evaluate this as a fair trade
-        score1 = kid1.evaluate_trade(offer, request)
-        score2 = kid2.evaluate_trade(request, offer)
+        score1 = kid1.evaluate_trade(offer, request, world.economy)
+        score2 = kid2.evaluate_trade(request, offer, world.economy)
         
         # Scores should be reasonable (implementation dependent)
         assert isinstance(score1, (int, float))

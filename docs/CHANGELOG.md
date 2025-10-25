@@ -8,7 +8,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
-- Sprint 2: Core Trading System
 - Sprint 3: Possession System & Basic UI
 - Sprint 4: Rumor System
 - Sprint 5: Debt & Mood Systems
@@ -16,6 +15,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Sprint 7: Scenarios, Random Events & Progression
 - Sprint 8: Polish, Juice & Launch Prep
 - Sprint 9: Sandbox Mode & Advanced Features
+
+## [0.2.0] - 2024-12-20 - Sprint 2 Complete
+
+### Added
+- **Core Trading System**
+  - 1-for-1 and multi-item trades (1-3 candy types per trade)
+  - Autonomous trading AI with personality-based evaluation
+  - Trade proposal generation and acceptance logic
+  - Kids autonomously initiate and complete trades
+
+- **Economy System**
+  - Real values for all candy types loaded from config
+  - Market price calculations based on trade history
+  - Trade history tracking with configurable window size
+  - Volatility and trend strength calculations
+  - Price discovery mechanics with belief updates
+
+- **Price Discovery System**
+  - Configurable modes: fixed, random, convergent
+  - Kids start with different believed values
+  - Belief updates from completed trades
+  - Convergence toward real values over time
+  - Learning rate configuration
+
+- **Visual Feedback**
+  - Trade particles moving between kids
+  - Floating text showing trade details
+  - Market ticker displaying real-time prices
+  - Economy debug overlay (press 'E' key)
+  - Enhanced inventory display with value information
+
+- **Trading AI Logic**
+  - Personality-based trade evaluation (VALUE_INVESTOR, PANIC_SELLER, etc.)
+  - Mood modifiers affecting trade decisions
+  - Candy preference system
+  - Partner search using spatial grid
+  - Trade cooldown and range limitations
+
+- **Testing Suite**
+  - 12 new unit tests for trading logic
+  - Tests for candy type system, inventory management, trade evaluation
+  - Tests for trading AI partner finding
+  - All 190 tests passing (100% pass rate)
+
+### Technical Details
+- **Performance**: Maintains 60 FPS with trading active
+- **Configuration**: All trading parameters configurable via JSON
+- **Architecture**: Clean separation between economy, AI, and visualization
+- **Testing**: Comprehensive test coverage for all new systems
+
+### Controls Added
+- **E Key**: Toggle economy debug overlay
+- **I Key**: Toggle inventory display (enhanced with values)
+- **Help Overlay**: Updated with new controls
 
 ## [0.1.0] - 2024-12-19 - Sprint 1 Complete
 

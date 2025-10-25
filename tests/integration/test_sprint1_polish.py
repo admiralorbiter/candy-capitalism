@@ -170,11 +170,11 @@ class TestSprint1PolishIntegration:
         from src.core.candy_types import CandyTypes
         
         # Test candy type colors
-        chocolate_color = CandyTypes.get_color("chocolate")
+        chocolate_color = CandyTypes.get_color("CHOCOLATE")
         assert chocolate_color == (139, 69, 19)
         
         # Test candy type icons
-        chocolate_icon = CandyTypes.get_icon("chocolate")
+        chocolate_icon = CandyTypes.get_icon("CHOCOLATE")
         assert chocolate_icon == "C"
         
         # Test unknown candy type fallback

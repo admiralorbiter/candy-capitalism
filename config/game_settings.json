@@ -23,7 +23,7 @@
     "price_discovery_mode": "fixed",
     "convergence_rate": 0.1,
     "market_history_window": 20,
-    "enable_multi_item_trades": false
+        "enable_multi_item_trades": true
   },
   "rumors": {
     "spread_chance": 0.3,
