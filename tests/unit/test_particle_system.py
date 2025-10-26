@@ -225,3 +225,33 @@ class TestParticleSystem:
         self.particle_system.add_particles(particles)
         
         assert self.particle_system.get_particle_count() == 3
+    
+    def test_emit_curse_particles(self):
+        """Test curse particle emission."""
+        position = Vector2(200, 200)
+        
+        # Emit curse particles
+        self.particle_system.emit_curse_particles(position)
+        
+        # Should have particles
+        assert len(self.particle_system.particles) == 20  # particle_count
+        
+        # Check particles are dark red
+        for particle in self.particle_system.particles:
+            assert particle.position == position
+            assert particle.color == (150, 0, 0)  # Dark red
+    
+    def test_emit_bless_particles(self):
+        """Test bless particle emission."""
+        position = Vector2(250, 250)
+        
+        # Emit bless particles
+        self.particle_system.emit_bless_particles(position)
+        
+        # Should have particles
+        assert len(self.particle_system.particles) == 25  # particle_count
+        
+        # Check particles are gold
+        for particle in self.particle_system.particles:
+            assert particle.position == position
+            assert particle.color == (255, 215, 0)  # Gold

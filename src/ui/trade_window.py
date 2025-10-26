@@ -332,6 +332,15 @@ class TradeWindow(UIElement):
         value_surface = self.text_font.render(value_text, True, value_color)
         screen.blit(value_surface, (self.bottom_rect.x + 5, self.bottom_rect.y + 10))
         
+        # Show chaos gain for bad trades
+        if trade_value < 0:
+            chaos_gain = abs(trade_value) * 2
+            chaos_text = f"Chaos Gain: +{chaos_gain}"
+            chaos_surface = self.text_font.render(chaos_text, True, COLORS['GREEN'])
+            chaos_rect = chaos_surface.get_rect(center=(self.bottom_rect.centerx, 
+                                                         self.bottom_rect.centery - 20))
+            screen.blit(chaos_surface, chaos_rect)
+        
         # Propose button
         button_color = COLORS['GREEN'] if trade_value < 0 else COLORS['GRAY']
         pygame.draw.rect(screen, button_color, self.propose_rect)

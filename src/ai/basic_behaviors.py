@@ -40,9 +40,19 @@ class BasicBehaviors:
         if not available_houses:
             return None
         
-        # Simple selection: pick random available house
-        # Later this could be based on house quality, distance, etc.
-        return random.choice(available_houses)
+        # Filter out cursed houses (kids avoid them)
+        preferred_houses = [h for h in available_houses if not h.is_cursed()]
+        
+        # If all houses are cursed, pick least cursed or wait
+        if not preferred_houses:
+            preferred_houses = available_houses
+        
+        # Prefer blessed houses (higher weight)
+        blessed_houses = [h for h in preferred_houses if h.is_blessed()]
+        if blessed_houses and random.random() < 0.7:  # 70% chance to prefer blessed
+            return random.choice(blessed_houses)
+        
+        return random.choice(preferred_houses)
     
     @staticmethod
     def should_visit_house(kid: Kid, house: House) -> bool:

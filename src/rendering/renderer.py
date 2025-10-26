@@ -6,6 +6,8 @@ with support for layered rendering and camera systems.
 """
 
 import pygame
+import math
+import time
 from typing import List, Dict, Any, Optional
 from ..entities.base_entity import BaseEntity
 from ..entities.kid import Kid
@@ -15,6 +17,7 @@ from .particle_system import ParticleSystem
 from ..core.constants import COLORS, SCREEN_SIZE
 from ..utils.vector2 import Vector2
 from ..ui.inventory_display import InventoryManager
+from .safe_draw import circle as safe_circle, lines as safe_lines
 
 
 class Renderer:
@@ -106,11 +109,9 @@ class Renderer:
         # For now, just a simple grid pattern
         grid_size = 50
         for x in range(0, SCREEN_SIZE[0], grid_size):
-            pygame.draw.line(self.screen, COLORS['DARK_GRAY'], 
-                           (x, 0), (x, SCREEN_SIZE[1]), 1)
+            safe_lines(self.screen, COLORS['DARK_GRAY'], False, [(x, 0), (x, SCREEN_SIZE[1])], 1)
         for y in range(0, SCREEN_SIZE[1], grid_size):
-            pygame.draw.line(self.screen, COLORS['DARK_GRAY'], 
-                           (0, y), (SCREEN_SIZE[0], y), 1)
+            safe_lines(self.screen, COLORS['DARK_GRAY'], False, [(0, y), (SCREEN_SIZE[0], y)], 1)
     
     def _render_entities(self, world):
         """Render all world entities."""
@@ -132,6 +133,9 @@ class Renderer:
         """Render a house entity."""
         # Convert world position to screen position
         screen_pos = self.camera.world_to_screen(house.position)
+        
+        # Draw house glow effect (before house)
+        self._render_house_glow(house, screen_pos)
         
         # Draw house as a rectangle
         house_rect = pygame.Rect(
@@ -163,12 +167,6 @@ class Renderer:
         text_rect = text_surface.get_rect(center=house_rect.center)
         self.screen.blit(text_surface, text_rect)
         
-        # Draw power effect indicators
-        if house.is_blessed() or house.is_cursed():
-            effect_color = (255, 255, 0) if house.is_blessed() else (255, 0, 0)
-            pygame.draw.circle(self.screen, effect_color, 
-                             screen_pos.to_int_tuple(), 25, 2)
-        
         # Draw cooldown indicator
         if house.dispense_cooldown > 0:
             self._render_house_cooldown(house, screen_pos)
@@ -185,8 +183,8 @@ class Renderer:
         # Draw possession glow effect
         self._render_possession_glow(kid, screen_pos)
         
-        pygame.draw.circle(self.screen, color, screen_pos.to_int_tuple(), radius)
-        pygame.draw.circle(self.screen, (0, 0, 0), screen_pos.to_int_tuple(), radius, 2)
+        safe_circle(self.screen, color, screen_pos.to_int_tuple(), radius)
+        safe_circle(self.screen, (0, 0, 0), screen_pos.to_int_tuple(), radius, 2)
         
         # Draw kid ID
         font = self._get_font(12)
@@ -274,6 +272,52 @@ class Renderer:
         
         pygame.draw.rect(self.screen, color, indicator_rect)
     
+    def _render_house_glow(self, house: House, screen_pos: Vector2):
+        """Render glow effect for cursed/blessed houses."""
+        pulse = (math.sin(time.time() * 3) + 1) / 2  # 0-1 pulsing
+        
+        # Determine glow color based on house state
+        if house.is_cursed() and house.is_blessed():
+            # Both active - use orange/yellow for conflicted state
+            glow_color = (255, 165, 0)  # Orange
+            glow_radius = 45 + int(pulse * 10)
+        elif house.is_cursed():
+            glow_color = (255, 50, 50)  # Red
+            glow_radius = 35 + int(pulse * 10)
+        elif house.is_blessed():
+            glow_color = (100, 255, 100)  # Green
+            glow_radius = 40 + int(pulse * 10)
+        else:
+            return
+        
+        # Multi-layer glow
+        for i in range(3):
+            alpha = max(0, min(255, 80 - (i * 25)))  # Clamp alpha to 0-255
+            radius = glow_radius + (i * 5)
+            
+            # CRITICAL: Ensure radius fits within surface
+            # Radius must be less than surface_size/2 to fit inside
+            # Use a safe buffer to prevent edge cases
+            max_radius = 45  # Safe maximum radius
+            radius = min(radius, max_radius)
+            
+            # Surface size must be at least 2*radius + 4 for safety margins
+            surface_size = max(2 * radius + 4, 4)
+            
+            # Ensure color components are valid integers in 0-255 range
+            r = max(0, min(255, int(glow_color[0])))
+            g = max(0, min(255, int(glow_color[1])))
+            b = max(0, min(255, int(glow_color[2])))
+            a = max(0, min(255, int(alpha)))
+            
+            glow_surface = pygame.Surface((surface_size, surface_size), pygame.SRCALPHA)
+            center_pos = (surface_size // 2, surface_size // 2)
+            # Draw RGB-only, then apply alpha to the surface
+            pygame.draw.circle(glow_surface, (r, g, b), center_pos, radius)
+            glow_surface.set_alpha(a)
+            glow_rect = glow_surface.get_rect(center=screen_pos.to_int_tuple())
+            self.screen.blit(glow_surface, glow_rect)
+    
     def _render_trading_bloc(self, bloc, kids: List[Kid]):
         """Render trading bloc visual indicators."""
         if not bloc.members:
@@ -295,9 +339,7 @@ class Renderer:
                 screen_pos1 = self.camera.world_to_screen(pos1)
                 screen_pos2 = self.camera.world_to_screen(pos2)
                 
-                pygame.draw.line(self.screen, bloc.color, 
-                               screen_pos1.to_int_tuple(), 
-                               screen_pos2.to_int_tuple(), 2)
+                safe_lines(self.screen, bloc.color, False, [screen_pos1.to_int_tuple(), screen_pos2.to_int_tuple()], 2)
     
     def _render_effects(self):
         """Render visual effects."""
@@ -400,7 +442,7 @@ class Renderer:
             # Draw waypoints
             for i, point in enumerate(screen_path):
                 color = (255, 0, 0) if i == kid.path_index else (0, 255, 255)
-                pygame.draw.circle(self.screen, color, point, 3)
+                safe_circle(self.screen, color, point, 3)
     
     def toggle_debug(self):
         """Toggle debug overlay on/off."""
@@ -492,9 +534,9 @@ class Renderer:
         letter = personality_letters.get(kid.personality.name, "?")
         
         # Draw background circle
-        circle_pos = (screen_pos.x, screen_pos.y - 35)
-        pygame.draw.circle(self.screen, (0, 0, 0), circle_pos, 8)
-        pygame.draw.circle(self.screen, (255, 255, 255), circle_pos, 8, 2)
+        circle_pos = (int(screen_pos.x), int(screen_pos.y - 35))
+        safe_circle(self.screen, (0, 0, 0), circle_pos, 8)
+        safe_circle(self.screen, (255, 255, 255), circle_pos, 8, 2)
         
         # Draw letter
         font = self._get_font(12)
@@ -537,18 +579,38 @@ class Renderer:
             return
         
         # Red pulsing glow for possessed kids
-        glow_radius = 15
-        glow_color = (255, 100, 100)  # Red glow
+        pulse = (math.sin(time.time() * 4) + 1) / 2  # Faster pulse
+        base_radius = 15
+        glow_radius = base_radius + int(pulse * 5)  # Pulsing size
+        
+        # Calculate pulsing red color with clamped values
+        g = int(80 + pulse * 80)
+        b = int(80 + pulse * 80)
+        glow_color = (255, min(255, g), min(255, b))  # Clamp RGB values to 0-255
         
         # Draw multiple circles for glow effect
         for i in range(3):
-            alpha = 100 - (i * 30)  # Decreasing alpha
-            radius = glow_radius + (i * 2)
+            alpha = max(0, min(255, 120 - (i * 35)))  # Clamp alpha to 0-255
+            radius = glow_radius + (i * 3)
             
-            # Create a surface for alpha blending
-            glow_surface = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
-            pygame.draw.circle(glow_surface, (*glow_color, alpha), 
-                             (radius, radius), radius)
+            # CRITICAL: Ensure radius fits within surface
+            max_radius = 25  # Safe maximum radius for possession glow
+            radius = min(radius, max_radius)
+            
+            # Surface size must be at least 2*radius + 4 for safety margins
+            surface_size = max(2 * radius + 4, 4)
+            
+            # Ensure color components are valid integers in 0-255 range
+            r = max(0, min(255, int(glow_color[0])))
+            g = max(0, min(255, int(glow_color[1])))
+            b = max(0, min(255, int(glow_color[2])))
+            a = max(0, min(255, int(alpha)))
+            
+            glow_surface = pygame.Surface((surface_size, surface_size), pygame.SRCALPHA)
+            center_pos = (surface_size // 2, surface_size // 2)
+            # Draw RGB-only, then apply alpha to the surface
+            pygame.draw.circle(glow_surface, (r, g, b), center_pos, radius)
+            glow_surface.set_alpha(a)
             
             # Blit to screen
             glow_rect = glow_surface.get_rect(center=screen_pos.to_int_tuple())

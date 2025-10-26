@@ -213,14 +213,26 @@ class ParticleSystem:
             # Get alpha for fading
             alpha = particle.get_alpha()
             
-            # Create surface with alpha
+            # CRITICAL: Validate and clamp all color components
+            # Ensure particle.color is valid and has 3 components
+            if not hasattr(particle, 'color') or not particle.color or len(particle.color) < 3:
+                # Skip invalid particles
+                continue
+            
+            # Clamp all color components to valid integer range
+            r = max(0, min(255, int(particle.color[0])))
+            g = max(0, min(255, int(particle.color[1])))
+            b = max(0, min(255, int(particle.color[2])))
+            a = max(0, min(255, int(alpha)))
+            
+            # Create surface with alpha and draw RGB-only, apply alpha via set_alpha
             import pygame
             particle_surface = pygame.Surface((8, 8), pygame.SRCALPHA)
-            color_with_alpha = (*particle.color, alpha)
-            pygame.draw.circle(particle_surface, color_with_alpha, (4, 4), 4)
+            pygame.draw.circle(particle_surface, (r, g, b), (4, 4), 4)
+            particle_surface.set_alpha(a)
             
-            # Blit to screen
-            screen.blit(particle_surface, (screen_pos.x - 4, screen_pos.y - 4))
+            # Blit to screen with integer coordinates
+            screen.blit(particle_surface, (int(screen_pos.x - 4), int(screen_pos.y - 4)))
     
     def clear(self):
         """Clear all particles."""
@@ -229,3 +241,27 @@ class ParticleSystem:
     def get_particle_count(self) -> int:
         """Get current particle count."""
         return len(self.particles)
+    
+    def emit_curse_particles(self, position: Vector2):
+        """Emit dark particles for curse effect."""
+        emitter = ParticleEmitter(
+            position=position,
+            particle_count=20,
+            spread=60.0,
+            speed=40.0,
+            lifetime=2.5,
+            color=(150, 0, 0)  # Dark red
+        )
+        self.add_particles(emitter.emit())
+    
+    def emit_bless_particles(self, position: Vector2):
+        """Emit golden particles for bless effect."""
+        emitter = ParticleEmitter(
+            position=position,
+            particle_count=25,
+            spread=70.0,
+            speed=50.0,
+            lifetime=3.0,
+            color=(255, 215, 0)  # Gold
+        )
+        self.add_particles(emitter.emit())

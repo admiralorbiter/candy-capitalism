@@ -92,11 +92,15 @@ class Game:
                 self.running = False
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    if self.state_machine.current_state == GameState.PLAYING:
-                        # Pause the game
-                        self.state_machine.transition(GameState.PAUSED)
-                    else:
+                    # Only quit from non-playing states
+                    if self.state_machine.current_state != GameState.PLAYING:
                         self.running = False
+                elif event.key == pygame.K_p:
+                    # Toggle pause
+                    if self.state_machine.current_state == GameState.PLAYING:
+                        self.state_machine.transition(GameState.PAUSED)
+                    elif self.state_machine.current_state == GameState.PAUSED:
+                        self.state_machine.transition(GameState.PLAYING)
                 else:
                     # Pass to current state
                     result = self.state_machine.handle_event(event)
@@ -104,6 +108,8 @@ class Game:
                         self.state_machine.transition(GameState.PLAYING)
                     elif result == "quit":
                         self.running = False
+                    elif result == "resume":
+                        self.state_machine.transition(GameState.PLAYING)
             else:
                 # Pass to current state
                 self.state_machine.handle_event(event)
@@ -266,6 +272,16 @@ class PlayingState(BaseState):
                 # Toggle economy debug overlay
                 self.economy_debug.toggle()
                 return True
+            elif event.key == pygame.K_t:
+                # Toggle trade window (if possessing)
+                if self.world and self.world.possession_system and self.world.possession_system.is_possessing():
+                    if self.trade_window and self.trade_window.visible:
+                        # Close trade window
+                        self.trade_window.close()
+                    else:
+                        # Open trade window (need to select target kid via click first)
+                        print("Press 'T' and then click on a kid to trade, or click a different kid while possessing")
+                return True
             elif event.key == pygame.K_ESCAPE:
                 # Release possession
                 print("ESC key pressed - attempting to release possession")
@@ -372,6 +388,16 @@ class PlayingState(BaseState):
                     
                     if entity:
                         if hasattr(entity, 'id') and entity.id.startswith('kid_'):  # It's a kid
+                            # If already possessing, try to trade instead of re-possessing
+                            if self.world and self.world.possession_system and self.world.possession_system.is_possessing():
+                                # Check if clicking on a different kid
+                                possessed_kid = self.world.possession_system.get_possessed_kid()
+                                if possessed_kid and possessed_kid.id != entity.id:
+                                    # Try to initiate trade with this kid
+                                    print(f"Attempting to trade with kid: {entity.id}")
+                                    self._initiate_trade(entity)
+                                    return True
+                            
                             # Try to possess the kid
                             print(f"Attempting to possess kid: {entity.id}")
                             success = self.world.try_possess_kid(entity)
@@ -519,7 +545,7 @@ class PlayingState(BaseState):
         if trade_value < 0:
             chaos_points = abs(trade_value) * 2  # 2 chaos per candy value
             print(f"Awarding {chaos_points} chaos points for bad trade")
-            # TODO: Add chaos points to chaos score display
+            self.chaos_score.add_chaos_points(chaos_points, "bad_trade")
         
         # Execute the trade (simple inventory swap)
         self._execute_trade(possessed_kid, target_kid, player_offer, target_offer)
@@ -562,6 +588,8 @@ class PlayingState(BaseState):
             if success:
                 print(f"Cursed house: {house_id}")
                 self.chaos_score.add_chaos_points(5, "house_curse")
+                # Emit curse particles
+                self.particle_system.emit_curse_particles(house.position)
             else:
                 print(f"Failed to curse house: {house_id} (insufficient energy)")
     
@@ -573,6 +601,8 @@ class PlayingState(BaseState):
             if success:
                 print(f"Blessed house: {house_id}")
                 self.chaos_score.add_chaos_points(3, "house_bless")
+                # Emit bless particles
+                self.particle_system.emit_bless_particles(house.position)
             else:
                 print(f"Failed to bless house: {house_id} (insufficient energy)")
     
@@ -618,9 +648,17 @@ class PausedState(BaseState):
     def on_enter(self, data=None):
         print("Entered paused state")
     
+    def handle_event(self, event):
+        """Handle input events for paused state."""
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_p:
+                # Resume game
+                return "resume"
+        return False
+    
     def render(self, screen):
         # Simple placeholder rendering
         font = pygame.font.Font(None, 36)
-        text = font.render("Paused", True, COLORS['YELLOW'])
+        text = font.render("Paused - Press P to resume", True, COLORS['YELLOW'])
         text_rect = text.get_rect(center=(SCREEN_SIZE[0]//2, SCREEN_SIZE[1]//2))
         screen.blit(text, text_rect)

@@ -96,30 +96,34 @@
 - [x] Enhanced inventory display with value information
 - [x] 12 comprehensive unit tests for trading logic
 
-## Sprint 3: Possession System & Basic UI (Weeks 5-6)
+## Sprint 3: Possession System & Basic UI ✅ COMPLETED
 
 ### Goals
-- [ ] Implement player possession mechanic
-- [ ] Create basic HUD and interaction UI
-- [ ] Player can force bad trades
+- [x] Implement player possession mechanic
+- [x] Create basic HUD and interaction UI
+- [x] Player can force bad trades
 
 ### Deliverables
-- [ ] Chaos Energy system
-- [ ] Possess/release mechanics
-- [ ] Player-controlled trading while possessed
-- [ ] Basic HUD (energy bar, possessed kid info)
-- [ ] Trade UI window
-- [ ] Supply manipulation powers (Curse/Bless House)
+- [x] Chaos Energy system
+- [x] Possess/release mechanics
+- [x] Player-controlled trading while possessed
+- [x] Basic HUD (energy bar, possessed kid info)
+- [x] Trade UI window
+- [x] Supply manipulation powers (Curse/Bless House)
+- [x] Visual polish (house glows, possession highlight)
+- [x] Chaos points system for bad trades
+- [x] AI avoidance of cursed houses
+- [x] Particle effects for curse/bless
 
 ### Success Criteria
-- [ ] Can possess any kid with mouse click
-- [ ] Possession drains energy appropriately
-- [ ] Can force a bad trade (give chocolate, get trash)
-- [ ] Can curse a house and observe kids avoid it
-- [ ] Can bless a house and see kids flock to it
-- [ ] Supply manipulation creates price changes
-- [ ] HUD clearly shows possession state
-- [ ] Trade UI is functional (even if ugly)
+- [x] Can possess any kid with mouse click
+- [x] Possession drains energy appropriately
+- [x] Can force a bad trade (give chocolate, get trash)
+- [x] Can curse a house and observe kids avoid it
+- [x] Can bless a house and see kids flock to it
+- [x] Supply manipulation creates price changes
+- [x] HUD clearly shows possession state
+- [x] Trade UI is functional with chaos gain preview
 
 ## Sprint 4: Rumor System (Weeks 7-8)
 

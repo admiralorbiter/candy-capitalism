@@ -8,13 +8,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
-- Sprint 3: Possession System & Basic UI
 - Sprint 4: Rumor System
 - Sprint 5: Debt & Mood Systems
 - Sprint 6: Cartels, Behavior Contagion & Personality Polish
 - Sprint 7: Scenarios, Random Events & Progression
 - Sprint 8: Polish, Juice & Launch Prep
 - Sprint 9: Sandbox Mode & Advanced Features
+
+## [0.3.0] - 2024-12-22 - Sprint 3 Complete
+
+### Added
+- **Possession System**
+  - Chaos Energy system with regeneration and drain mechanics
+  - Click-to-possess/kid interaction for player control
+  - Possessed kid movement with WASD/arrow keys
+  - Release possession with ESC key
+  - Energy bar HUD displaying current chaos energy
+  - Possessed kid info panel showing inventory and stats
+
+- **Player-Controlled Trading**
+  - Trade window UI with drag-and-drop interface
+  - Select candy to offer and request from target kid
+  - Trade value calculation (good/bad trade indication)
+  - Chaos point rewards for bad trades (2x trade value)
+  - Trade preview showing chaos gain potential
+  - Player can force bad trades to earn chaos points
+
+- **Supply Manipulation Powers**
+  - Curse House power reduces candy supply (-50%)
+  - Bless House power increases candy supply (+50%)
+  - House cooldown system (30 seconds)
+  - Energy cost for powers (curse: 30, bless: 25)
+  - Chaos point rewards (curse: 5, bless: 3)
+
+- **AI Behavior Updates**
+  - Kids avoid cursed houses
+  - Kids prefer blessed houses (70% probability)
+  - House selection filters out cursed houses
+  - Natural supply-side manipulation creates economic effects
+
+- **Visual Polish**
+  - Pulsing red glow for cursed houses
+  - Pulsing green/gold glow for blessed houses
+  - Enhanced possession glow with pulsing red aura
+  - Particle effects for curse/bless activation
+  - Multi-layer glow effects with alpha blending
+  - Enhanced visibility for possessed kids
+
+- **UI Improvements**
+  - Trade window shows chaos gain preview for bad trades
+  - Chaos Score Display integrated with trade system
+  - Power menu for house manipulation
+  - Improved possession state indication
+  - Updated controls documentation
+
+### Technical Details
+- **Controls**: P key for pause/unpause, ESC for release possession
+- **Interaction**: Click different kid while possessing to initiate trade
+- **T Key**: Toggle trade window (when possessing)
+- **Performance**: Maintains 60 FPS with all visual effects active
+- **Architecture**: Clean event-driven UI system with callbacks
+- **Testing**: 210 unit tests passing, manual testing scenarios documented and verified
+- **Rendering**: Safe drawing wrappers prevent crashes from invalid color/coordinate arguments
 
 ## [0.2.0] - 2024-12-20 - Sprint 2 Complete
 
