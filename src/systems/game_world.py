@@ -34,8 +34,9 @@ class GameWorld:
         
         # Systems
         from .economy import Economy
+        from .possession_system import PossessionSystem
         self.economy = Economy()  # Initialize economy system
-        self.possession_system = None  # Possession system
+        self.possession_system = PossessionSystem()  # Initialize possession system
         self.rumor_system = None  # Rumor system
         self.event_system = None  # Event system
         self.combo_detector = None  # Combo detection system
@@ -127,6 +128,9 @@ class GameWorld:
         # These will be implemented in later sprints
         if self.economy:
             self.economy.update(dt)
+        
+        if self.possession_system:
+            self.possession_system.update(dt)
         
         if self.rumor_system:
             self.rumor_system.update(dt)
@@ -316,3 +320,120 @@ class GameWorld:
             # Apply separation force
             if colliding_kids:
                 kid.apply_separation_force(colliding_kids, dt)
+    
+    def try_possess_kid(self, kid: Kid) -> bool:
+        """
+        Attempt to possess a kid.
+        
+        Args:
+            kid: Kid to possess
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.possession_system:
+            return False
+        
+        return self.possession_system.possess(kid)
+    
+    def release_possession(self):
+        """Release current possession."""
+        if self.possession_system:
+            self.possession_system.release()
+    
+    def move_possessed_kid(self, direction: Vector2):
+        """
+        Move the currently possessed kid.
+        
+        Args:
+            direction: Direction to move (normalized)
+        """
+        if self.possession_system and self.possession_system.is_possessing():
+            self.possession_system.move_possessed(direction)
+    
+    def stop_possessed_kid(self):
+        """Stop the currently possessed kid from moving."""
+        if self.possession_system and self.possession_system.is_possessing():
+            self.possession_system.stop_possessed()
+    
+    def try_curse_house(self, house: House) -> bool:
+        """
+        Attempt to curse a house.
+        
+        Args:
+            house: House to curse
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.possession_system:
+            return False
+        
+        # Check if we have enough energy
+        curse_cost = 15  # From config
+        if self.possession_system.current_energy < curse_cost:
+            return False
+        
+        # Apply curse
+        house.curse()
+        
+        # Deduct energy
+        self.possession_system.current_energy -= curse_cost
+        
+        return True
+    
+    def try_bless_house(self, house: House) -> bool:
+        """
+        Attempt to bless a house.
+        
+        Args:
+            house: House to bless
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.possession_system:
+            return False
+        
+        # Check if we have enough energy
+        bless_cost = 25  # From config
+        if self.possession_system.current_energy < bless_cost:
+            return False
+        
+        # Apply blessing
+        house.bless()
+        
+        # Deduct energy
+        self.possession_system.current_energy -= bless_cost
+        
+        return True
+    
+    def get_entity_at_position(self, position: Vector2) -> Optional[Any]:
+        """
+        Get the topmost entity at a given position.
+        
+        Args:
+            position: World position to check
+            
+        Returns:
+            Entity at position, or None if none found
+        """
+        # Check kids first (they're on top)
+        for kid in self.kids:
+            if not kid.active:
+                continue
+            
+            # Simple distance check (assuming kids are ~20 pixels radius)
+            if kid.position.distance_to(position) <= 20:
+                return kid
+        
+        # Check houses
+        for house in self.houses:
+            if not house.active:
+                continue
+            
+            # Simple distance check (assuming houses are ~40 pixels radius)
+            if house.position.distance_to(position) <= 40:
+                return house
+        
+        return None

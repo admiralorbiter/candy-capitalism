@@ -69,6 +69,9 @@ class Renderer:
         # Clear screen
         self.screen.fill(COLORS['BACKGROUND'])
         
+        # Store world reference for possession checking
+        self.current_world = world
+        
         # Render background layer
         self._render_background()
         
@@ -178,6 +181,9 @@ class Renderer:
         # Draw kid as a colored circle
         color = self._get_kid_color(kid)
         radius = 8
+        
+        # Draw possession glow effect
+        self._render_possession_glow(kid, screen_pos)
         
         pygame.draw.circle(self.screen, color, screen_pos.to_int_tuple(), radius)
         pygame.draw.circle(self.screen, (0, 0, 0), screen_pos.to_int_tuple(), radius, 2)
@@ -515,6 +521,38 @@ class Renderer:
     def select_kid_for_inventory(self, kid: Kid):
         """Select a kid to show inventory for."""
         self.inventory_manager.select_kid(kid)
+    
+    def _render_possession_glow(self, kid: Kid, screen_pos: Vector2):
+        """Render possession glow effect around possessed kid."""
+        # Check if this kid is possessed
+        if not hasattr(self, 'current_world') or not self.current_world:
+            return
+        
+        possession_system = self.current_world.possession_system
+        if not possession_system or not possession_system.is_possessing():
+            return
+        
+        possessed_kid = possession_system.get_possessed_kid()
+        if not possessed_kid or possessed_kid.id != kid.id:
+            return
+        
+        # Red pulsing glow for possessed kids
+        glow_radius = 15
+        glow_color = (255, 100, 100)  # Red glow
+        
+        # Draw multiple circles for glow effect
+        for i in range(3):
+            alpha = 100 - (i * 30)  # Decreasing alpha
+            radius = glow_radius + (i * 2)
+            
+            # Create a surface for alpha blending
+            glow_surface = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+            pygame.draw.circle(glow_surface, (*glow_color, alpha), 
+                             (radius, radius), radius)
+            
+            # Blit to screen
+            glow_rect = glow_surface.get_rect(center=screen_pos.to_int_tuple())
+            self.screen.blit(glow_surface, glow_rect)
     
     def clear_cache(self):
         """Clear sprite and font caches."""

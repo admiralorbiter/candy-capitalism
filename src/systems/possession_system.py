@@ -34,7 +34,7 @@ class PossessionSystem:
         # Possession state
         self.current_target: Optional[Kid] = None
         self.possession_cooldown = 0.0
-        self.cooldown_duration = 3.0  # Seconds between possessions
+        self.cooldown_duration = 1.0  # Seconds between possessions (reduced for better UX)
         
         # Player actions
         self.available_actions = [
@@ -69,8 +69,7 @@ class PossessionSystem:
     def can_possess(self) -> bool:
         """Check if player can possess a kid."""
         return (self.possession_cooldown <= 0 and 
-                self.current_energy > 10.0 and  # Need some energy to start
-                self.current_target is None)
+                self.current_energy > 10.0)  # Need some energy to start
     
     def possess(self, kid: Kid) -> bool:
         """
@@ -95,8 +94,12 @@ class PossessionSystem:
     def release(self):
         """Release current possession."""
         if self.current_target:
+            print(f"Releasing possession of {self.current_target.id}")
             self.current_target = None
             self.possession_cooldown = self.cooldown_duration
+            print("✓ Possession released successfully")
+        else:
+            print("No target to release")
     
     def is_possessing(self) -> bool:
         """Check if currently possessing a kid."""
